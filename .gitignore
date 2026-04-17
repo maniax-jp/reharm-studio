@@ -1,0 +1,24 @@
+# Build artifacts
+build/
+ReharmStudio_artefacts/
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# External libraries (cloned from GitHub)
+JUCE/
+
+# Compiled objects and libraries
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.app
