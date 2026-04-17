@@ -5,6 +5,7 @@ ReharmStudio_artefacts/
 # IDE settings
 .vscode/
 .idea/
+.tmp/
 *.swp
 *.swo
 
