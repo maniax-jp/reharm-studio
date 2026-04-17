@@ -2,6 +2,8 @@
 
 #include <JuceHeader.h>
 #include "ChordProgressionGenerator.h"
+#include "AudioEngine.h"
+#include "ChordTheory.h"
 
 class MainComponent  : public juce::AudioAppComponent,
                        public juce::ChangeListener,
@@ -33,15 +35,11 @@ private:
     void loadPlugin();
     void playChordProgression();
     void stopPlayback();
-    juce::Array<int> getChordNotes (const juce::String& chordSymbol, int root, bool isMajor);
 
-// ...existing code...
     juce::AudioDeviceManager deviceManager;
-    std::unique_ptr<juce::AudioPluginInstance> pluginInstance;
+    std::unique_ptr<AudioEngine> audioEngine;
 
     juce::TextButton loadButton { "Load VST3" };
-// ...existing code...
-
     juce::TextButton playButton { "Play Progression" };
     juce::TextButton stopButton { "Stop" };
     juce::ComboBox keyComboBox;
@@ -54,17 +52,6 @@ private:
     juce::TextEditor bpmLabel;
 
     ChordProgressionGenerator generator;
-
-    juce::Array<juce::Array<int>> chordNotes;
-    int currentChordIndex = 0;
-    bool isPlaying = false;
-    float volume = 0.8f;
-    std::atomic<int> bpm { 120 };
-    std::atomic<int> samplesPerBeat { 0 };
-    std::atomic<bool> stopRequested { false };
-    double currentSampleRate = 44100.0;
-    double currentBeatPosition = 0.0;
-    juce::MidiBuffer midiBuffer;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

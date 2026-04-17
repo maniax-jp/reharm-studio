@@ -22,3 +22,7 @@ Thumbs.db
 *.dylib
 *.exe
 *.app
+
+# Logs and temporary files
+*.log
+*.tmp

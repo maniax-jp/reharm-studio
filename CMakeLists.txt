@@ -16,15 +16,25 @@ juce_generate_juce_header(ReharmStudio)
 # For tests, we can use a standard add_executable but we need to handle JUCE headers.
 # A better way is to use juce_add_gui_app for the tests too, or just add the necessary includes.
 
-add_executable(ReharmStudioTests
+juce_add_gui_app(ReharmStudioTests
+    PRODUCT_NAME "Reharm Studio Tests"
+)
+target_sources(ReharmStudioTests PRIVATE
     Tests/TestRunner.cpp
     Tests/TimingTest.cpp
     Tests/ChordProgressionTest.cpp
+    Tests/ChordTheoryTest.cpp
+    Tests/AudioEngineTest.cpp
     Source/ChordProgressionGenerator.cpp
+    Source/ChordTheory.cpp
+    Source/AudioEngine.cpp
 )
+juce_generate_juce_header(ReharmStudioTests)
 
 target_link_libraries(ReharmStudioTests PRIVATE
     juce::juce_core
+    juce::juce_audio_basics
+    juce::juce_audio_processors
 )
 
 target_sources(ReharmStudio PRIVATE
@@ -32,6 +42,8 @@ target_sources(ReharmStudio PRIVATE
     Source/MainComponent.cpp
     Source/ChordProgressionGenerator.h
     Source/ChordProgressionGenerator.cpp
+    Source/AudioEngine.cpp
+    Source/ChordTheory.cpp
 )
 
 target_compile_definitions(ReharmStudio PRIVATE
