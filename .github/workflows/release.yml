@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew install cmake
+
+      - name: Configure and Build
+        run: |
+          mkdir build
+          cd build
+          cmake ..
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "Reharm Studio" \
+            -srcfolder "build/ReharmStudio_artefacts/Reharm Studio.app" \
+            -ov -format UDZO "ReharmStudio.dmg"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ReharmStudio.dmg
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
