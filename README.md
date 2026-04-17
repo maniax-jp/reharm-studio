@@ -26,7 +26,7 @@
 3. CMakeでビルド
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/maniax-jp/reharm-studio.git
 cd reharm-studio
 git submodule update --init --recursive
 mkdir build
@@ -52,4 +52,4 @@ make
 
 ## ライセンス
 
-[ライセンス情報を記載]
+このプロジェクトは MIT ライセンスの下で公開されています。詳細は [LICENSE](./LICENSE) ファイルを参照してください。
