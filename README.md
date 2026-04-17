@@ -50,6 +50,16 @@ make
 - プラグイン形式: VST3
 - プラットフォーム: macOS
 
+## トラブルシューティング
+
+リリース版を起動した際に「“Reharm Studio.app”は壊れているため開けません。 ゴミ箱に入れる必要があります。」と表示される場合は、macOSのセキュリティ機能（Gatekeeper）による制限です。
+
+以下のコマンドをターミナルで実行することで解決できます：
+
+```bash
+xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
+```
+
 ## ライセンス
 
 このプロジェクトは [GNU Affero General Public License v3.0 (AGPLv3)](https://www.gnu.org/licenses/agpl-3.0.html) の下で公開されています。
