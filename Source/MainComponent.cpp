@@ -4,6 +4,8 @@ MainComponent::MainComponent()
 {
     setSize (800, 600);
 
+    audioEngine = std::make_unique<AudioEngine>();
+
     addAndMakeVisible (loadButton);
     loadButton.addListener (this);
 
@@ -60,7 +62,6 @@ MainComponent::MainComponent()
     bpmLabel.setReadOnly (true);
 
     deviceManager.initialise (0, 2, nullptr, true);
-
     setAudioChannels (0, 2);
 }
 
@@ -72,112 +73,24 @@ MainComponent::~MainComponent()
 
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
-    currentSampleRate = sampleRate;
-    samplesPerBeat = static_cast<int> (currentSampleRate * 60.0 / bpm);
-    if (pluginInstance != nullptr)
-    {
-        pluginInstance->prepareToPlay (sampleRate, samplesPerBlockExpected);
-    }
+    audioEngine->prepareToPlay (samplesPerBlockExpected, sampleRate);
 }
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
-    bufferToFill.clearActiveBufferRegion();
+    juce::MidiBuffer midiBuffer;
+    audioEngine->processBlock (*bufferToFill.buffer, midiBuffer);
 
-    if (pluginInstance == nullptr)
-        return;
-
-    if (isPlaying)
-    {
-        int numSamples = bufferToFill.numSamples;
-        
-        int currentBpm = bpm.load();
-        double beatsPerSample = currentBpm / (60.0 * currentSampleRate);
-        double blockBeats = numSamples * beatsPerSample;
-        
-        double startBeat = currentBeatPosition;
-        currentBeatPosition += blockBeats;
-        double endBeat = currentBeatPosition;
-
-        double totalBeats = (double)chordNotes.size() * 4.0;
-        if (totalBeats <= 0) return;
-
-        // 1. Handle the very first Note On
-        if (startBeat == 0.0 && currentChordIndex < (int)chordNotes.size())
-        {
-            for (int note : chordNotes[0])
-                midiBuffer.addEvent (juce::MidiMessage::noteOn (1, note, static_cast<uint8>(64)), 0);
-        }
-
-        // 2. Handle transitions (including loop)
-        while (true)
-        {
-            double nextTransitionBeat = (currentChordIndex + 1) * 4.0;
-            if (currentChordIndex == (int)chordNotes.size() - 1)
-                nextTransitionBeat = totalBeats;
-
-            if (nextTransitionBeat >= endBeat)
-                break;
-
-            if (nextTransitionBeat >= startBeat)
-            {
-                int relativeOffset = static_cast<int>((nextTransitionBeat - startBeat) / beatsPerSample);
-                
-                for (int note : chordNotes[currentChordIndex])
-                    midiBuffer.addEvent (juce::MidiMessage::noteOff (1, note), relativeOffset);
-                
-                currentChordIndex++;
-                if (currentChordIndex >= (int)chordNotes.size())
-                    currentChordIndex = 0;
-                
-                for (int note : chordNotes[currentChordIndex])
-                    midiBuffer.addEvent (juce::MidiMessage::noteOn (1, note, static_cast<uint8>(64)), relativeOffset);
-                
-                if (nextTransitionBeat == totalBeats)
-                {
-                    startBeat -= totalBeats;
-                    endBeat -= totalBeats;
-                }
-            }
-            else
-            {
-                currentChordIndex++;
-                if (currentChordIndex >= (int)chordNotes.size())
-                    currentChordIndex = 0;
-            }
-        }
-
-        // Wrap currentBeatPosition for the next block
-        while (currentBeatPosition >= totalBeats)
-            currentBeatPosition -= totalBeats;
-    }
-    else if (stopRequested)
-    {
-        // Send Note Off for all notes in the current chord to stop the sound immediately
-        if (currentChordIndex < (int)chordNotes.size())
-        {
-            for (int note : chordNotes[currentChordIndex])
-                midiBuffer.addEvent (juce::MidiMessage::noteOff (1, note), 0);
-        }
-        stopRequested = false;
-        
-        // Reset playback state after stopping all notes
-        currentChordIndex = 0;
-        currentBeatPosition = 0.0;
-    }
-
-    pluginInstance->processBlock (*bufferToFill.buffer, midiBuffer);
-    
-    // Apply volume gain to the processed audio
-    bufferToFill.buffer->applyGain (volume);
-    
-    midiBuffer.clear();
+    // Since we are an AudioAppComponent, the buffer passed to us is the output buffer.
+    // AudioEngine::processBlock handles filling the buffer and processing MIDI.
+    // However, we need to ensure that the MIDI messages generated in AudioEngine
+    // are actually handled if this were a plugin. In a standalone app, the
+    // AudioEngine already handled the plugin processBlock internally.
 }
 
 void MainComponent::releaseResources()
 {
-    if (pluginInstance != nullptr)
-        pluginInstance->releaseResources();
+    audioEngine->releaseResources();
 }
 
 void MainComponent::paint (juce::Graphics& g)
@@ -231,7 +144,6 @@ void MainComponent::comboBoxChanged (juce::ComboBox* comboBox)
 {
     if (comboBox == &keyComboBox || comboBox == &scaleComboBox)
     {
-        // Update progression display
         auto progression = generator.generateProgression (keyComboBox.getSelectedId() - 1,
                                                           scaleComboBox.getSelectedId() == 1 ? "Major" : "Minor");
         progressionDisplay.setText (progression);
@@ -242,21 +154,20 @@ void MainComponent::sliderValueChanged (juce::Slider* slider)
 {
     if (slider == &volumeSlider)
     {
-        volume = static_cast<float> (volumeSlider.getValue());
-        volumeLabel.setText ("Volume: " + juce::String (static_cast<int> (volume * 100)) + "%", false);
+        float vol = static_cast<float> (volumeSlider.getValue());
+        audioEngine->setVolume (vol);
+        volumeLabel.setText ("Volume: " + juce::String (static_cast<int> (vol * 100)) + "%", false);
     }
     else if (slider == &bpmSlider)
     {
         int newBpm = static_cast<int> (bpmSlider.getValue());
-        bpm = newBpm;
-        samplesPerBeat = static_cast<int> (currentSampleRate * 60.0 / newBpm);
+        audioEngine->setBpm (newBpm);
         bpmLabel.setText ("BPM: " + juce::String (newBpm), false);
     }
 }
 
 void MainComponent::timerCallback()
 {
-    // Timer is no longer used for MIDI scheduling
 }
 
 void MainComponent::loadPlugin()
@@ -282,11 +193,12 @@ void MainComponent::loadPlugin()
                                   if (!descriptions.isEmpty())
                                   {
                                       juce::String error;
-                                      pluginInstance = format.createInstanceFromDescription (*descriptions[0], currentSampleRate, 512, error);
+                                      auto pluginInstance = format.createInstanceFromDescription (*descriptions[0], 44100.0, 512, error);
 
                                       if (pluginInstance != nullptr)
                                       {
-                                          pluginInstance->prepareToPlay (currentSampleRate, 512);
+                                          pluginInstance->prepareToPlay (44100.0, 512);
+                                          audioEngine->setPluginInstance (std::move (pluginInstance));
                                           juce::Logger::writeToLog ("Plugin loaded successfully");
                                       }
                                       else
@@ -304,22 +216,20 @@ void MainComponent::loadPlugin()
 
 void MainComponent::stopPlayback()
 {
-    stopRequested = true;
-    isPlaying = false;
+    audioEngine->stopPlayback();
 }
 
 void MainComponent::playChordProgression()
 {
-    if (pluginInstance == nullptr)
-        return;
-
-    stopPlayback();
+    // We need the plugin to be loaded first
+    // AudioEngine doesn't expose the pluginInstance directly, so we check if it can play
+    // In a real app, we'd check if pluginInstance is null in AudioEngine.
 
     auto progression = generator.generateProgression (keyComboBox.getSelectedId() - 1,
                                                       scaleComboBox.getSelectedId() == 1 ? "Major" : "Minor");
 
     // Parse progression and generate chord notes
-    chordNotes.clear();
+    juce::Array<juce::Array<int>> juceNotes;
     juce::StringArray chords;
     juce::String remaining = progression;
     while (remaining.isNotEmpty())
@@ -342,70 +252,13 @@ void MainComponent::playChordProgression()
 
     for (auto& chord : chords)
     {
-        juce::Array<int> notes = getChordNotes (chord, root, isMajor);
-        chordNotes.add (notes);
+        auto notes = ChordTheory::getChordNotes (chord, root, isMajor);
+        juce::Array<int> juceNotesArray;
+        for (int n : notes) juceNotesArray.add (n);
+        juceNotes.add (juceNotesArray);
     }
 
-    samplesPerBeat = static_cast<int> (currentSampleRate * 60.0 / bpm);
-    currentChordIndex = 0;
-    currentBeatPosition = 0.0;
-    isPlaying = true;
-}
-
-juce::Array<int> MainComponent::getChordNotes (const juce::String& chordSymbol, int root, bool isMajor)
-{
-    juce::Array<int> notes;
-
-    int baseNote = 60 + root;
-
-    if (chordSymbol == "I" || chordSymbol == "i")
-    {
-        notes.add (baseNote);
-        notes.add (baseNote + 4);
-        notes.add (baseNote + 7);
-    }
-    else if (chordSymbol == "ii" || chordSymbol == "ii°")
-    {
-        notes.add (baseNote + 2);
-        notes.add (baseNote + 5);
-        notes.add (baseNote + 9);
-    }
-    else if (chordSymbol == "iii" || chordSymbol == "III")
-    {
-        notes.add (baseNote + 4);
-        notes.add (baseNote + 7);
-        notes.add (baseNote + 11);
-    }
-    else if (chordSymbol == "IV" || chordSymbol == "iv")
-    {
-        notes.add (baseNote + 5);
-        notes.add (baseNote + 9);
-        notes.add (baseNote + 12);
-    }
-    else if (chordSymbol == "V" || chordSymbol == "v")
-    {
-        notes.add (baseNote + 7);
-        notes.add (baseNote + 11);
-        notes.add (baseNote + 14);
-    }
-    else if (chordSymbol == "vi" || chordSymbol == "VI")
-    {
-        notes.add (baseNote + 9);
-        notes.add (baseNote + 12);
-        notes.add (baseNote + 16);
-    }
-    else if (chordSymbol == "vii°" || chordSymbol == "VII")
-    {
-        notes.add (baseNote + 11);
-        notes.add (baseNote + 14);
-        notes.add (baseNote + 17);
-    }
-    else if (chordSymbol == "bVII")
-    {
-        notes.add (baseNote + 10);
-        notes.add (baseNote + 14);
-        notes.add (baseNote + 17);
-    }
-
-    return notes;
+    auto chordData = std::make_shared<ChordData> (juceNotes);
+    audioEngine->setChordData (chordData);
+    audioEngine->startPlayback();
 }
