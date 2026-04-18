@@ -17,7 +17,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install cmake
+          if ! command -v cmake &> /dev/null; then
+            brew install cmake
+          fi
 
       - name: Configure and Build
         run: |
@@ -36,10 +38,10 @@ jobs:
 
       - name: Create ZIP
         run: |
-          ditto -ck "build/ReharmStudio_artefacts/Reharm Studio.app" "ReharmStudio.zip"
+          ditto -ck --keepParent "build/ReharmStudio_artefacts/Reharm Studio.app" "ReharmStudio.zip"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: ReharmStudio.zip
           tag_name: v${{ github.run_number }}
