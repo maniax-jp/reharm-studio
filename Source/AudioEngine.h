@@ -41,6 +41,7 @@ public:
     // Control methods
     juce::AudioPluginInstance* getPluginInstance() const { return mPluginInstance.get(); }
     void setPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin);
+    void setPluginReady(bool ready) { mPluginReady = ready; }
     void setBpm(int newBpm);
     void setVolume(float newVolume);
     void setChordData(std::shared_ptr<ChordData> newData);
@@ -55,6 +56,7 @@ private:
     // Plugin and Audio state
     std::unique_ptr<juce::AudioPluginInstance> mPluginInstance;
     juce::CriticalSection pluginLock;
+    std::atomic<bool> mPluginReady { false };
     double mSampleRate = 44100.0;
 
     // Thread-safe parameters

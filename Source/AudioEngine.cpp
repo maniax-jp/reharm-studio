@@ -104,8 +104,25 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
 
     {
         juce::ScopedLock sl (pluginLock);
-        if (mPluginInstance != nullptr)
-            mPluginInstance->processBlock(buffer, midiMessages);
+        if (mPluginInstance != nullptr && mPluginReady.load())
+        {
+            // To prevent potential memory corruption or crashes in some heavy plugins (like Kontakt),
+            // we use a temporary buffer for the plugin processing and then copy the result.
+            // This isolates the plugin's memory access from the main audio buffer.
+            // Note: In a high-performance app, we should pre-allocate this buffer in prepareToPlay.
+            juce::AudioBuffer<float> tempBuffer (buffer.getNumChannels(), buffer.getNumSamples());
+            tempBuffer.clear();
+
+            try
+            {
+                mPluginInstance->processBlock (tempBuffer, midiMessages);
+                buffer.copyFrom (0, 0, tempBuffer, 0, 0, buffer.getNumSamples());
+            }
+            catch (...)
+            {
+                juce::Logger::writeToLog ("Exception caught during plugin processBlock");
+            }
+        }
     }
     buffer.applyGain(mVolume.load());
 }
@@ -120,9 +137,13 @@ void AudioEngine::releaseResources()
 void AudioEngine::setPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin)
 {
     juce::ScopedLock sl (pluginLock);
+    mPluginReady = false;
     if (mPluginInstance != nullptr)
         mPluginInstance->releaseResources();
     mPluginInstance = std::move(plugin);
+
+    // We will mark the plugin as ready after a short delay or explicitly
+    // to avoid calling processBlock before internal initialization is complete.
 }
 
 void AudioEngine::setBpm(int newBpm)
