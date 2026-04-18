@@ -48,11 +48,11 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 - Homebrew (CMakeインストール用)
 
 ### 手順
-
+ 
 1. リポジトリをクローン
 2. JUCEをサブモジュールとして取得
 3. CMakeでビルド
-
+ 
 ```bash
 git clone https://github.com/maniax-jp/reharm-studio.git
 cd reharm-studio
@@ -62,6 +62,25 @@ cd build
 cmake ..
 make
 ```
+
+### テストのビルドと実行
+
+テストをビルドして実行するには、`BUILD_TESTS` オプションを有効にして CMake を実行してください。
+
+```bash
+# ビルドディレクトリに移動
+cd build
+
+# テストを有効にして構成
+cmake -DBUILD_TESTS=ON ..
+
+# テストターゲットをビルド
+cmake --build . --target ReharmStudioTests
+
+# テストを実行
+"./ReharmStudioTests_artefacts/Reharm Studio Tests.app/Contents/MacOS/Reharm Studio Tests"
+```
+
 
 ## 技術仕様
 

@@ -9,6 +9,9 @@ MainComponent::MainComponent()
     addAndMakeVisible (loadButton);
     loadButton.addListener (this);
 
+    addAndMakeVisible (pluginNameButton);
+    pluginNameButton.addListener (this);
+
     addAndMakeVisible (playButton);
     playButton.addListener (this);
 
@@ -104,6 +107,7 @@ void MainComponent::resized()
 
     auto topArea = area.removeFromTop (40);
     loadButton.setBounds (topArea.removeFromLeft (100));
+    pluginNameButton.setBounds (topArea.removeFromLeft (200));
     playButton.setBounds (topArea.removeFromLeft (150));
     stopButton.setBounds (topArea.removeFromLeft (100));
 
@@ -129,6 +133,10 @@ void MainComponent::buttonClicked (juce::Button* button)
     if (button == &loadButton)
     {
         loadPlugin();
+    }
+    else if (button == &pluginNameButton)
+    {
+        openPluginEditor();
     }
     else if (button == &playButton)
     {
@@ -170,6 +178,27 @@ void MainComponent::timerCallback()
 {
 }
 
+void MainComponent::openPluginEditor()
+{
+    auto* plugin = audioEngine->getPluginInstance();
+    if (plugin == nullptr)
+        return;
+
+    if (editorWindow != nullptr)
+    {
+        editorWindow->setVisible (true);
+        return;
+    }
+
+    auto* editor = plugin->createEditorIfNeeded();
+    if (editor != nullptr)
+    {
+        auto window = std::make_unique<PluginEditorWindow> (plugin->getName(), editor);
+        window->setVisible (true);
+        editorWindow = std::move (window);
+    }
+}
+
 void MainComponent::loadPlugin()
 {
     auto chooser = std::make_shared<juce::FileChooser> ("Select a VST3 plugin file...",
@@ -184,6 +213,7 @@ void MainComponent::loadPlugin()
                               if (file.exists())
                               {
                                   stopPlayback();
+                                  editorWindow.reset();
 
                                   juce::VST3PluginFormat format;
                                   juce::OwnedArray<juce::PluginDescription> descriptions;
@@ -193,11 +223,22 @@ void MainComponent::loadPlugin()
                                   if (!descriptions.isEmpty())
                                   {
                                       juce::String error;
-                                      auto pluginInstance = format.createInstanceFromDescription (*descriptions[0], 44100.0, 512, error);
+
+                                      auto setup = deviceManager.getAudioDeviceSetup();
+                                      double sampleRate = setup.sampleRate;
+                                      int blockSize = setup.bufferSize;
+
+                                      // IMPORTANT: Some heavy plugins like Kontakt require the audio device
+                                      // to be fully initialized and active before they can be created.
+                                      // We ensure the device is active.
+                                      deviceManager.setAudioDeviceSetup(setup, true);
+
+                                      auto pluginInstance = format.createInstanceFromDescription (*descriptions[0], sampleRate, blockSize, error);
 
                                       if (pluginInstance != nullptr)
                                       {
-                                          pluginInstance->prepareToPlay (44100.0, 512);
+                                          pluginInstance->prepareToPlay (sampleRate, blockSize);
+                                          pluginNameButton.setButtonText (pluginInstance->getName());
                                           audioEngine->setPluginInstance (std::move (pluginInstance));
                                           juce::Logger::writeToLog ("Plugin loaded successfully");
                                       }

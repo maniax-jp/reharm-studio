@@ -2,6 +2,39 @@
 #include "../Source/AudioEngine.h"
 #include <vector>
 
+class MockPluginInstance : public juce::AudioPluginInstance
+{
+public:
+    MockPluginInstance() : juce::AudioPluginInstance (juce::AudioProcessor::BusesProperties()) {}
+
+    // AudioProcessor overrides
+    const juce::String getName() const override { return "MockPlugin"; }
+    double getTailLengthSeconds() const override { return 0.0; }
+    bool acceptsMidi() const override { return true; }
+    bool producesMidi() const override { return true; }
+    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+    bool hasEditor() const override { return false; }
+    int getNumPrograms() override { return 1; }
+    int getCurrentProgram() override { return 0; }
+    void setCurrentProgram (int index) override {}
+    const juce::String getProgramName (int index) override { return "Default"; }
+    void changeProgramName (int index, const juce::String& newName) override {}
+    void getStateInformation (juce::MemoryBlock& destData) override {}
+    void setStateInformation (const void* data, int sizeInBytes) override {}
+
+    // AudioPluginInstance overrides
+    void fillInPluginDescription (juce::PluginDescription& description) const override
+    {
+        description.name = "MockPlugin";
+        description.manufacturerName = "MockVendor";
+    }
+
+    // Other overrides
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override {}
+    void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {}
+    void releaseResources() override {}
+};
+
 class AudioEngineTest : public juce::UnitTest
 {
 public:
@@ -89,6 +122,16 @@ public:
             engine.processBlock (buffer, midi);
 
             expect (midi.getNumEvents() == 3, "Should send NoteOff for all notes when stopping");
+        }
+
+        beginTest ("PluginInstanceGetter");
+        {
+            AudioEngine engine;
+            auto plugin = std::make_unique<MockPluginInstance>();
+            auto* pluginPtr = plugin.get();
+
+            engine.setPluginInstance (std::move (plugin));
+            expect (engine.getPluginInstance() == pluginPtr, "getPluginInstance should return the loaded plugin");
         }
     }
 };

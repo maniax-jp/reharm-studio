@@ -5,6 +5,25 @@
 #include "AudioEngine.h"
 #include "ChordTheory.h"
 
+class PluginEditorWindow : public juce::DocumentWindow
+{
+public:
+    PluginEditorWindow (juce::String name, juce::AudioProcessorEditor* editor)
+        : juce::DocumentWindow (name,
+                                juce::Colours::darkgrey,
+                                juce::DocumentWindow::closeButton)
+    {
+        setContentNonOwned (editor, true);
+        setResizable (false, false); // Default to non-resizable
+        centreWithSize (editor->getWidth(), editor->getHeight());
+    }
+
+    void closeButtonPressed() override
+    {
+        setVisible (false);
+    }
+};
+
 class MainComponent  : public juce::AudioAppComponent,
                        public juce::ChangeListener,
                        public juce::Button::Listener,
@@ -33,6 +52,7 @@ public:
 
 private:
     void loadPlugin();
+    void openPluginEditor();
     void playChordProgression();
     void stopPlayback();
 
@@ -40,6 +60,7 @@ private:
     std::unique_ptr<AudioEngine> audioEngine;
 
     juce::TextButton loadButton { "Load VST3" };
+    juce::TextButton pluginNameButton { "No Plugin Loaded" };
     juce::TextButton playButton { "Play Progression" };
     juce::TextButton stopButton { "Stop" };
     juce::ComboBox keyComboBox;
@@ -52,6 +73,8 @@ private:
     juce::TextEditor bpmLabel;
 
     ChordProgressionGenerator generator;
+
+    std::unique_ptr<PluginEditorWindow> editorWindow;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
