@@ -176,6 +176,16 @@ void MainComponent::sliderValueChanged (juce::Slider* slider)
 
 void MainComponent::timerCallback()
 {
+    if (audioEngine->getPluginInstance() != nullptr)
+    {
+        audioEngine->setPluginReady(true);
+        stopTimer();
+    }
+}
+
+void MainComponent::markPluginAsReady()
+{
+    audioEngine->setPluginReady(true);
 }
 
 void MainComponent::openPluginEditor()
@@ -241,6 +251,9 @@ void MainComponent::loadPlugin()
                                           pluginNameButton.setButtonText (pluginInstance->getName());
                                           audioEngine->setPluginInstance (std::move (pluginInstance));
                                           juce::Logger::writeToLog ("Plugin loaded successfully");
+
+                                          // Start a timer to mark the plugin as ready after a short delay
+                                          startTimer (100);
                                       }
                                       else
                                       {

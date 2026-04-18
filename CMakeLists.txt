@@ -12,7 +12,12 @@ juce_add_gui_app(ReharmStudio
     PRODUCT_NAME "Reharm Studio"
 )
 
+juce_add_gui_app(PluginLoadTest
+    PRODUCT_NAME "Plugin Load Test"
+)
+
 juce_generate_juce_header(ReharmStudio)
+juce_generate_juce_header(PluginLoadTest)
 
 # Use juce_add_gui_app or similar for the main app
 # For tests, we can use a standard add_executable but we need to handle JUCE headers.
@@ -62,6 +67,10 @@ target_sources(ReharmStudio PRIVATE
     Source/ChordTheory.cpp
 )
 
+target_sources(PluginLoadTest PRIVATE
+    Source/PluginLoadTest.cpp
+)
+
 target_compile_definitions(ReharmStudio PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
@@ -82,4 +91,22 @@ target_link_libraries(ReharmStudio PRIVATE
     juce::juce_graphics
     juce::juce_gui_basics
     juce::juce_gui_extra
+)
+
+target_compile_definitions(PluginLoadTest PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_PLUGINHOST_VST3=1
+)
+
+target_link_libraries(PluginLoadTest PRIVATE
+    juce::juce_audio_basics
+    juce::juce_audio_devices
+    juce::juce_audio_plugin_client
+    juce::juce_audio_processors
+    juce::juce_core
+    juce::juce_events
+    juce::juce_graphics
+    juce::juce_gui_basics
 )

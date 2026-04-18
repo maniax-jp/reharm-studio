@@ -49,6 +49,8 @@ public:
     void sliderValueChanged (juce::Slider* slider) override;
 
     void timerCallback() override;
+    void markPluginAsReady();
+
 
 private:
     void loadPlugin();
