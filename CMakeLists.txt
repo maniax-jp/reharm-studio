@@ -22,12 +22,19 @@ if(BUILD_TESTS)
 juce_add_gui_app(ReharmStudioTests
     PRODUCT_NAME "Reharm Studio Tests"
 )
+target_compile_definitions(ReharmStudioTests PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_PLUGINHOST_VST3=1
+)
 target_sources(ReharmStudioTests PRIVATE
     Tests/TestRunner.cpp
     Tests/TimingTest.cpp
     Tests/ChordProgressionTest.cpp
     Tests/ChordTheoryTest.cpp
     Tests/AudioEngineTest.cpp
+    Source/MainComponent.cpp
     Source/ChordProgressionGenerator.cpp
     Source/ChordTheory.cpp
     Source/AudioEngine.cpp
@@ -38,6 +45,11 @@ target_link_libraries(ReharmStudioTests PRIVATE
     juce::juce_core
     juce::juce_audio_basics
     juce::juce_audio_processors
+    juce::juce_audio_utils
+    juce::juce_audio_devices
+    juce::juce_events
+    juce::juce_graphics
+    juce::juce_gui_basics
 )
 endif()
 

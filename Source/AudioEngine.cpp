@@ -12,6 +12,7 @@ AudioEngine::~AudioEngine()
 
 void AudioEngine::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
 {
+    juce::ScopedLock sl (pluginLock);
     mSampleRate = sampleRate;
     if (mPluginInstance != nullptr)
     {
@@ -101,21 +102,26 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
         mCurrentBeatPosition = 0.0;
     }
 
-    if (mPluginInstance != nullptr)
     {
-        mPluginInstance->processBlock(buffer, midiMessages);
+        juce::ScopedLock sl (pluginLock);
+        if (mPluginInstance != nullptr)
+            mPluginInstance->processBlock(buffer, midiMessages);
     }
     buffer.applyGain(mVolume.load());
 }
 
 void AudioEngine::releaseResources()
 {
+    juce::ScopedLock sl (pluginLock);
     if (mPluginInstance != nullptr)
         mPluginInstance->releaseResources();
 }
 
 void AudioEngine::setPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin)
 {
+    juce::ScopedLock sl (pluginLock);
+    if (mPluginInstance != nullptr)
+        mPluginInstance->releaseResources();
     mPluginInstance = std::move(plugin);
 }
 
