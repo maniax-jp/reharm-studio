@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(ReharmStudio VERSION 1.0.0)
 
+option(BUILD_TESTS "Build the test suite" OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(JUCE)
@@ -16,6 +18,7 @@ juce_generate_juce_header(ReharmStudio)
 # For tests, we can use a standard add_executable but we need to handle JUCE headers.
 # A better way is to use juce_add_gui_app for the tests too, or just add the necessary includes.
 
+if(BUILD_TESTS)
 juce_add_gui_app(ReharmStudioTests
     PRODUCT_NAME "Reharm Studio Tests"
 )
@@ -36,6 +39,7 @@ target_link_libraries(ReharmStudioTests PRIVATE
     juce::juce_audio_basics
     juce::juce_audio_processors
 )
+endif()
 
 target_sources(ReharmStudio PRIVATE
     Source/Main.cpp
