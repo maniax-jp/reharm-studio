@@ -41,12 +41,17 @@ public:
     // Control methods
     juce::AudioPluginInstance* getPluginInstance() const { return mPluginInstance.get(); }
     void setPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin);
-    void setPluginReady(bool ready) { mPluginReady = ready; }
+    void loadPlugin(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize);
+    void setPluginReady(bool ready) { std::atomic_store(&mPluginReady, ready); }
     void setBpm(int newBpm);
     void setVolume(float newVolume);
     void setChordData(std::shared_ptr<ChordData> newData);
     void startPlayback();
     void stopPlayback();
+    void beginPluginLoad();
+    void endPluginLoad();
+    bool isPluginLoading() const { return mLoadingPlugin.load(); }
+    void loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize);
 
     // State getters
     bool isPlaying() const { return mIsPlaying.load(); }
@@ -64,6 +69,7 @@ private:
     std::atomic<float> mVolume { 0.8f };
     std::atomic<bool> mIsPlaying { false };
     std::atomic<bool> mStopRequested { false };
+    std::atomic<bool> mLoadingPlugin { false };
 
     // Chord progression data (Using C++17 atomic shared_ptr functions)
     std::shared_ptr<ChordData> mCurrentChordData;
