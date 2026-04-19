@@ -21,7 +21,7 @@
 ## トラブルシューティング
 
 ### 起動時にセキュリティ警告が出る場合
-「“Reharm Studio.app”は開いていません Appleは、“Reharm Studio.app”にMacに損害を与えたり、プライバシーを侵害する可能性のあるマルウェアが含まれていないことを検証できませんでした」などの警告が表示されることがあります。これはアプリが Apple による有料の署名を受けていないために発生します。
+「"Reharm Studio.app"は開いていません Appleは,"Reharm Studio.app"にMacに損害を与えたり、プライバシーを侵害する可能性のあるマルウェアが含まれていないことを検証できませんでした」などの警告が表示されることがあります。これはアプリが Apple による有料の署名を受けていないために発生します。
 
 **対処方法 (macOS 15 Sequoia 以降):**
 1. アプリをダブルクリックして起動し、警告ダイアログが表示されたら「完了」または「キャンセル」を押して閉じます。
@@ -32,10 +32,21 @@
 一度この操作を行えば、次回以降は通常通りに起動できます。
 
 ### 「アプリは壊れているため開けません」と表示される場合
-「“Reharm Studio.app”は壊れているため開けません」と表示される場合は、以下のコマンドをターミナルで実行してください：
+「"Reharm Studio.app"は壊れているため開けません」と表示される場合は、以下のコマンドをターミナルで実行してください：
 
 ```bash
 xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
+```
+
+## プロジェクト構造
+
+```
+.
+├── Source/          # 本体アプリケーションのソースコード
+├── Tests/           # 単体テスト
+├── Experiments/     # 実験的なプログラム（仕様確認・動作検証用）
+├── CMakeLists.txt
+└── CMakePresets.json
 ```
 
 ## ビルド方法
@@ -47,40 +58,81 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 - CMake
 - Homebrew (CMakeインストール用)
 
-### 手順
- 
-1. リポジトリをクローン
-2. JUCEをサブモジュールとして取得
-3. CMakeでビルド
- 
+### ビルドターゲット
+
+| ターゲット | オプション | 説明 |
+|---|---|---|
+| ReharmStudio | 常にビルド | メインアプリケーション |
+| ReharmStudioTests | `BUILD_TESTS=ON` | テスイート |
+| PluginLoadTest | `BUILD_EXPERIMENTS=ON` | 実験用プログラム |
+
+### ビルドモード
+
+| モード | `CMAKE_BUILD_TYPE` | 用途 |
+|---|---|---|
+| Debug（デフォルト） | `Debug` | 開発・デバッグ |
+| Release | `Release` | リリース前の最終確認 |
+
+### CMake Presets によるビルド（推奨）
+
 ```bash
+# リポジトリをクローン
 git clone https://github.com/maniax-jp/reharm-studio.git
 cd reharm-studio
 git submodule update --init --recursive
-mkdir build
-cd build
-cmake ..
-make
+
+# 本体のDebugビルド（デフォルト）
+cmake --preset default
+cmake --build --preset default
 ```
 
-### テストのビルドと実行
+### 利用可能なプリセット
 
-テストをビルドして実行するには、`BUILD_TESTS` オプションを有効にして CMake を実行してください。
+| プリセット名 | 内容 |
+|---|---|
+| `default` | 本体のみ（Debug） |
+| `debug-tests` | 本体 + テスト（Debug） |
+| `debug-experiments` | 本体 + 実験プログラム（Debug） |
+| `debug-all` | 全てをビルド（Debug） |
+| `release` | 本体のみ（Release / arm64+x86_64 ユニバーサル） |
+| `release-all` | 全てをビルド（Release） |
+
+```bash
+# テスト付きDebugビルド
+cmake --preset debug-tests
+cmake --build --preset debug-tests
+
+# Releaseビルド（リリース前の最終確認用）
+cmake --preset release
+cmake --build --preset release
+```
+
+### プリセットを使わない場合
 
 ```bash
 # ビルドディレクトリに移動
+mkdir build
 cd build
 
-# テストを有効にして構成
-cmake -DBUILD_TESTS=ON ..
+# 通常のDebugビルド（本体のみ）
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+make
 
-# テストターゲットをビルド
+# テストを有効にしてビルド
+cmake -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON ..
 cmake --build . --target ReharmStudioTests
 
-# テストを実行
-"./ReharmStudioTests_artefacts/Reharm Studio Tests.app/Contents/MacOS/Reharm Studio Tests"
+# 実験プログラムを有効にしてビルド
+cmake -DCMAKE_BUILD_TYPE=Debug -DBUILD_EXPERIMENTS=ON ..
+cmake --build . --target PluginLoadTest
 ```
 
+### テストの実行
+
+```bash
+# テストバイナリを実行
+"./ReharmStudioTests_artefacts/Reharm Studio Tests.app/Contents/MacOS/Reharm Studio Tests"
+```
 
 ## 技術仕様
 
