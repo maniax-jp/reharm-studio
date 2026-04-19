@@ -35,6 +35,9 @@ target_compile_definitions(ReharmStudio PRIVATE
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_PLUGINHOST_VST3=1
 )
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_definitions(ReharmStudio PRIVATE REHARM_DEBUG_LOG=1)
+endif()
 
 target_link_libraries(ReharmStudio PRIVATE
     juce::juce_audio_basics
@@ -81,6 +84,9 @@ target_compile_definitions(ReharmStudioTests PRIVATE
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_PLUGINHOST_VST3=1
 )
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_definitions(ReharmStudioTests PRIVATE REHARM_DEBUG_LOG=1)
+endif()
 
 target_link_libraries(ReharmStudioTests PRIVATE
     juce::juce_core
@@ -116,6 +122,9 @@ target_compile_definitions(PluginLoadTest PRIVATE
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_PLUGINHOST_VST3=1
 )
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_definitions(PluginLoadTest PRIVATE REHARM_DEBUG_LOG=1)
+endif()
 
 target_link_libraries(PluginLoadTest PRIVATE
     juce::juce_audio_basics

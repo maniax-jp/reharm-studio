@@ -24,10 +24,10 @@ void AudioEngine::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
 {
     juce::ScopedLock sl (pluginLock);
     mSampleRate = sampleRate;
+
     if (mPluginInstance != nullptr)
     {
         mPluginInstance->prepareToPlay(sampleRate, samplesPerBlockExpected);
-
         std::atomic_store(&mPluginReady, true);
     }
 }
@@ -35,8 +35,6 @@ void AudioEngine::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
 void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     // If loading a plugin, only clear the buffer and return immediately.
-    // This completely prevents any plugin processing during initialization,
-    // which is required to prevent VPS Avenger from crashing.
     if (std::atomic_load(&mLoadingPlugin))
     {
         buffer.clear();
@@ -46,7 +44,7 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
 
     buffer.clear();
 
-    // Capture a local reference to the current chord data to ensure it stays valid during the block
+    // Capture a local reference to the current chord data
     auto chordData = std::atomic_load(&mCurrentChordData);
 
     if (mIsPlaying.load())
@@ -191,7 +189,6 @@ void AudioEngine::loadPlugin(std::unique_ptr<juce::AudioPluginInstance> plugin, 
         mPluginInstance = std::move(plugin);
     }
 
-    // Call prepareToPlay outside the lock, then mark as ready.
     mPluginInstance->prepareToPlay (sampleRate, blockSize);
 
     juce::ScopedLock sl (pluginLock);
