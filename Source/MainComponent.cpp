@@ -4,6 +4,7 @@
 
 static void debugLog (const juce::String& msg)
 {
+#ifdef REHARM_DEBUG_LOG
     auto path = juce::File ("/tmp/reharm_debug.log");
     std::ofstream f (path.getFullPathName().toStdString(), std::ios::app);
     if (f.is_open()) {
@@ -11,6 +12,7 @@ static void debugLog (const juce::String& msg)
         f.close();
     }
     juce::Logger::writeToLog (msg);
+#endif
 }
 
 // CoreAudio types (minimal definitions to avoid header conflicts)
@@ -88,8 +90,8 @@ MainComponent::MainComponent()
     bpmLabel.setText ("BPM: 120", false);
     bpmLabel.setReadOnly (true);
 
-    deviceManager.initialise (0, 2, nullptr, true);
-    setAudioChannels (0, 2);
+    deviceManager.initialise (2, 2, nullptr, true);
+    setAudioChannels (2, 2);
 }
 
 MainComponent::~MainComponent()
@@ -209,27 +211,41 @@ void MainComponent::timerCallback()
 
 void MainComponent::markPluginAsReady()
 {
-    audioEngine->setPluginReady(true);
+    debugLog ("markPluginAsReady: called");
+    audioEngine->setPluginReady (true);
+    debugLog ("markPluginAsReady: plugin ready set");
 }
 
 void MainComponent::openPluginEditor()
 {
+    debugLog ("openPluginEditor: ENTER");
     auto* plugin = audioEngine->getPluginInstance();
     if (plugin == nullptr)
+    {
+        debugLog ("openPluginEditor: no plugin loaded");
         return;
+    }
 
     if (editorWindow != nullptr)
     {
+        debugLog ("openPluginEditor: existing window, making visible");
         editorWindow->setVisible (true);
         return;
     }
 
+    debugLog ("openPluginEditor: creating editor (plugin=" + plugin->getName() + ")");
     auto* editor = plugin->createEditorIfNeeded();
     if (editor != nullptr)
     {
+        debugLog ("openPluginEditor: editor created, creating window");
         auto window = std::make_unique<PluginEditorWindow> (plugin->getName(), editor);
         window->setVisible (true);
         editorWindow = std::move (window);
+        debugLog ("openPluginEditor: editor window created and shown");
+    }
+    else
+    {
+        debugLog ("openPluginEditor: plugin has no editor");
     }
 }
 

@@ -53,10 +53,6 @@ public:
     bool isPluginLoading() const { return mLoadingPlugin.load(); }
     void loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize);
 
-    // State getters
-    bool isPlaying() const { return mIsPlaying.load(); }
-    int getBpm() const { return mBpm.load(); }
-
 private:
     // Plugin and Audio state
     std::unique_ptr<juce::AudioPluginInstance> mPluginInstance;
