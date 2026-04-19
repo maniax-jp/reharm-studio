@@ -5,6 +5,16 @@ AudioEngine::AudioEngine()
     std::atomic_store(&mCurrentChordData, std::make_shared<ChordData>());
 }
 
+void AudioEngine::beginPluginLoad()
+{
+    std::atomic_store(&mLoadingPlugin, true);
+}
+
+void AudioEngine::endPluginLoad()
+{
+    std::atomic_store(&mLoadingPlugin, false);
+}
+
 AudioEngine::~AudioEngine()
 {
     stopPlayback();
@@ -14,17 +24,27 @@ void AudioEngine::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
 {
     juce::ScopedLock sl (pluginLock);
     mSampleRate = sampleRate;
+
     if (mPluginInstance != nullptr)
     {
         mPluginInstance->prepareToPlay(sampleRate, samplesPerBlockExpected);
+        std::atomic_store(&mPluginReady, true);
     }
 }
 
 void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    // If loading a plugin, only clear the buffer and return immediately.
+    if (std::atomic_load(&mLoadingPlugin))
+    {
+        buffer.clear();
+        buffer.applyGain(mVolume.load());
+        return;
+    }
+
     buffer.clear();
 
-    // Capture a local reference to the current chord data to ensure it stays valid during the block
+    // Capture a local reference to the current chord data
     auto chordData = std::atomic_load(&mCurrentChordData);
 
     if (mIsPlaying.load())
@@ -97,26 +117,26 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
             for (int note : chordData->notes[mCurrentChordIndex])
                 midiMessages.addEvent(juce::MidiMessage::noteOff(1, note), 0);
         }
-        mStopRequested = false;
+        std::atomic_store(&mStopRequested, false);
         mCurrentChordIndex = 0;
         mCurrentBeatPosition = 0.0;
     }
 
     {
         juce::ScopedLock sl (pluginLock);
-        if (mPluginInstance != nullptr && mPluginReady.load())
+        if (mPluginInstance != nullptr && std::atomic_load(&mPluginReady))
         {
-            // To prevent potential memory corruption or crashes in some heavy plugins (like Kontakt),
-            // we use a temporary buffer for the plugin processing and then copy the result.
-            // This isolates the plugin's memory access from the main audio buffer.
-            // Note: In a high-performance app, we should pre-allocate this buffer in prepareToPlay.
-            juce::AudioBuffer<float> tempBuffer (buffer.getNumChannels(), buffer.getNumSamples());
+            int numDeviceCh = buffer.getNumChannels();
+            int numPluginOut = mPluginInstance->getTotalNumOutputChannels();
+            int numCh = jmax (numDeviceCh, numPluginOut);
+            juce::AudioBuffer<float> tempBuffer (numCh, buffer.getNumSamples());
             tempBuffer.clear();
 
             try
             {
                 mPluginInstance->processBlock (tempBuffer, midiMessages);
-                buffer.copyFrom (0, 0, tempBuffer, 0, 0, buffer.getNumSamples());
+                for (int ch = 0; ch < numDeviceCh; ++ch)
+                    buffer.copyFrom (ch, 0, tempBuffer, ch, 0, buffer.getNumSamples());
             }
             catch (...)
             {
@@ -137,13 +157,42 @@ void AudioEngine::releaseResources()
 void AudioEngine::setPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin)
 {
     juce::ScopedLock sl (pluginLock);
-    mPluginReady = false;
+    std::atomic_store(&mPluginReady, false);
     if (mPluginInstance != nullptr)
         mPluginInstance->releaseResources();
     mPluginInstance = std::move(plugin);
+}
 
-    // We will mark the plugin as ready after a short delay or explicitly
-    // to avoid calling processBlock before internal initialization is complete.
+void AudioEngine::loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize)
+{
+    {
+        juce::ScopedLock sl (pluginLock);
+        std::atomic_store(&mPluginReady, false);
+        if (mPluginInstance != nullptr)
+            mPluginInstance->releaseResources();
+        mPluginInstance = std::move(plugin);
+    }
+
+    mPluginInstance->prepareToPlay (sampleRate, blockSize);
+
+    juce::ScopedLock sl (pluginLock);
+    std::atomic_store(&mPluginReady, true);
+}
+
+void AudioEngine::loadPlugin(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize)
+{
+    {
+        juce::ScopedLock sl (pluginLock);
+        std::atomic_store(&mPluginReady, false);
+        if (mPluginInstance != nullptr)
+            mPluginInstance->releaseResources();
+        mPluginInstance = std::move(plugin);
+    }
+
+    mPluginInstance->prepareToPlay (sampleRate, blockSize);
+
+    juce::ScopedLock sl (pluginLock);
+    std::atomic_store(&mPluginReady, true);
 }
 
 void AudioEngine::setBpm(int newBpm)
@@ -165,11 +214,11 @@ void AudioEngine::startPlayback()
 {
     mCurrentChordIndex = 0;
     mCurrentBeatPosition = 0.0;
-    mIsPlaying = true;
+    std::atomic_store(&mIsPlaying, true);
 }
 
 void AudioEngine::stopPlayback()
 {
-    mStopRequested = true;
-    mIsPlaying = false;
+    std::atomic_store(&mStopRequested, true);
+    std::atomic_store(&mIsPlaying, false);
 }
