@@ -26,3 +26,9 @@ Thumbs.db
 # Logs and temporary files
 *.log
 *.tmp
+
+# npm and yarn
+node_modules/
+dist/
+package-lock.json
+package.json

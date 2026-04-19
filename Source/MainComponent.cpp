@@ -1,4 +1,30 @@
 #include "MainComponent.h"
+#include <dlfcn.h>
+#include <fstream>
+
+static void debugLog (const juce::String& msg)
+{
+#ifdef REHARM_DEBUG_LOG
+    auto path = juce::File ("/tmp/reharm_debug.log");
+    std::ofstream f (path.getFullPathName().toStdString(), std::ios::app);
+    if (f.is_open()) {
+        f << msg << std::endl;
+        f.close();
+    }
+    juce::Logger::writeToLog (msg);
+#endif
+}
+
+// CoreAudio types (minimal definitions to avoid header conflicts)
+typedef uint32_t UInt32;
+typedef uint64_t AudioObjectID;
+typedef int32_t AudioObjectPropertyStatus;
+typedef struct AudioObjectPropertyAddress {
+    UInt32 mSelector;
+    UInt32 mScope;
+    UInt32 mElement;
+} AudioObjectPropertyAddress;
+typedef AudioObjectID AudioDeviceID;
 
 MainComponent::MainComponent()
 {
@@ -64,8 +90,8 @@ MainComponent::MainComponent()
     bpmLabel.setText ("BPM: 120", false);
     bpmLabel.setReadOnly (true);
 
-    deviceManager.initialise (0, 2, nullptr, true);
-    setAudioChannels (0, 2);
+    deviceManager.initialise (2, 2, nullptr, true);
+    setAudioChannels (2, 2);
 }
 
 MainComponent::~MainComponent()
@@ -185,27 +211,41 @@ void MainComponent::timerCallback()
 
 void MainComponent::markPluginAsReady()
 {
-    audioEngine->setPluginReady(true);
+    debugLog ("markPluginAsReady: called");
+    audioEngine->setPluginReady (true);
+    debugLog ("markPluginAsReady: plugin ready set");
 }
 
 void MainComponent::openPluginEditor()
 {
+    debugLog ("openPluginEditor: ENTER");
     auto* plugin = audioEngine->getPluginInstance();
     if (plugin == nullptr)
+    {
+        debugLog ("openPluginEditor: no plugin loaded");
         return;
+    }
 
     if (editorWindow != nullptr)
     {
+        debugLog ("openPluginEditor: existing window, making visible");
         editorWindow->setVisible (true);
         return;
     }
 
+    debugLog ("openPluginEditor: creating editor (plugin=" + plugin->getName() + ")");
     auto* editor = plugin->createEditorIfNeeded();
     if (editor != nullptr)
     {
+        debugLog ("openPluginEditor: editor created, creating window");
         auto window = std::make_unique<PluginEditorWindow> (plugin->getName(), editor);
         window->setVisible (true);
         editorWindow = std::move (window);
+        debugLog ("openPluginEditor: editor window created and shown");
+    }
+    else
+    {
+        debugLog ("openPluginEditor: plugin has no editor");
     }
 }
 
@@ -222,47 +262,68 @@ void MainComponent::loadPlugin()
 
                               if (file.exists())
                               {
+                                  debugLog ("loadPlugin: file selected: " + file.getFullPathName());
+
                                   stopPlayback();
                                   editorWindow.reset();
 
                                   juce::VST3PluginFormat format;
                                   juce::OwnedArray<juce::PluginDescription> descriptions;
 
+                                  debugLog ("loadPlugin: scanning plugin file...");
                                   format.findAllTypesForFile (descriptions, file.getFullPathName());
+                                  debugLog ("loadPlugin: scan complete, descriptions count: " + juce::String (descriptions.size()));
 
                                   if (!descriptions.isEmpty())
                                   {
-                                      juce::String error;
-
                                       auto setup = deviceManager.getAudioDeviceSetup();
                                       double sampleRate = setup.sampleRate;
                                       int blockSize = setup.bufferSize;
 
-                                      // IMPORTANT: Some heavy plugins like Kontakt require the audio device
-                                      // to be fully initialized and active before they can be created.
-                                      // We ensure the device is active.
-                                      deviceManager.setAudioDeviceSetup(setup, true);
+                                      debugLog ("loadPlugin: closing audio device (SR=" + juce::String (sampleRate) + ", BS=" + juce::String (blockSize) + ")");
+                                      deviceManager.closeAudioDevice();
+                                      debugLog ("loadPlugin: audio device closed");
 
-                                      auto pluginInstance = format.createInstanceFromDescription (*descriptions[0], sampleRate, blockSize, error);
+                                      audioEngine->beginPluginLoad();
+                                      juce::Thread::sleep (200);
+
+                                      debugLog ("loadPlugin: calling createInstanceFromDescription...");
+                                      juce::String error;
+                                      auto descCopy = *descriptions[0];
+                                      debugLog ("loadPlugin: desc name=" + descCopy.name);
+                                      auto pluginInstance = format.createInstanceFromDescription (descCopy, sampleRate, blockSize, error);
+
+                                      audioEngine->endPluginLoad();
 
                                       if (pluginInstance != nullptr)
                                       {
-                                          pluginInstance->prepareToPlay (sampleRate, blockSize);
-                                          pluginNameButton.setButtonText (pluginInstance->getName());
-                                          audioEngine->setPluginInstance (std::move (pluginInstance));
-                                          juce::Logger::writeToLog ("Plugin loaded successfully");
+                                          debugLog ("loadPlugin: createInstanceFromDescription succeeded");
 
-                                          // Start a timer to mark the plugin as ready after a short delay
-                                          startTimer (100);
+                                          // Reinitialize audio device BEFORE loadPluginInstance (which calls prepareToPlay)
+                                          debugLog ("loadPlugin: reinitializing audio device...");
+                                          deviceManager.initialise (0, 2, nullptr, true);
+                                          debugLog ("loadPlugin: audio device reinitialized");
+
+                                          auto pluginName = pluginInstance->getName();
+                                          audioEngine->loadPluginInstance (std::move (pluginInstance), sampleRate, blockSize);
+                                          debugLog ("Plugin loaded successfully");
+
+                                          // Set button text AFTER loading to avoid UI thread contention
+                                          pluginNameButton.setButtonText (pluginName);
+                                          debugLog ("Plugin loaded UI update: " + pluginName);
                                       }
                                       else
                                       {
-                                          juce::Logger::writeToLog ("Failed to load plugin: " + error);
+                                          // Reinitialize audio device even on failure
+                                          debugLog ("loadPlugin: reinitializing audio device...");
+                                          deviceManager.initialise (0, 2, nullptr, true);
+                                          debugLog ("loadPlugin: audio device reinitialized");
+                                          debugLog ("loadPlugin: createInstanceFromDescription returned nullptr: " + error);
                                       }
                                   }
                                   else
                                   {
-                                      juce::Logger::writeToLog ("No valid VST3 plugin found");
+                                      debugLog ("No valid VST3 plugin found");
                                   }
                               }
                           });

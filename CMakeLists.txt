@@ -2,61 +2,23 @@ cmake_minimum_required(VERSION 3.15)
 
 project(ReharmStudio VERSION 1.0.0)
 
-option(BUILD_TESTS "Build the test suite" OFF)
+# Build type: default to Debug
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(JUCE)
 
+# ============================================================================
+# Main App (always built)
+# ============================================================================
 juce_add_gui_app(ReharmStudio
     PRODUCT_NAME "Reharm Studio"
 )
 
-juce_add_gui_app(PluginLoadTest
-    PRODUCT_NAME "Plugin Load Test"
-)
-
 juce_generate_juce_header(ReharmStudio)
-juce_generate_juce_header(PluginLoadTest)
-
-# Use juce_add_gui_app or similar for the main app
-# For tests, we can use a standard add_executable but we need to handle JUCE headers.
-# A better way is to use juce_add_gui_app for the tests too, or just add the necessary includes.
-
-if(BUILD_TESTS)
-juce_add_gui_app(ReharmStudioTests
-    PRODUCT_NAME "Reharm Studio Tests"
-)
-target_compile_definitions(ReharmStudioTests PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_PLUGINHOST_VST3=1
-)
-target_sources(ReharmStudioTests PRIVATE
-    Tests/TestRunner.cpp
-    Tests/TimingTest.cpp
-    Tests/ChordProgressionTest.cpp
-    Tests/ChordTheoryTest.cpp
-    Tests/AudioEngineTest.cpp
-    Source/MainComponent.cpp
-    Source/ChordProgressionGenerator.cpp
-    Source/ChordTheory.cpp
-    Source/AudioEngine.cpp
-)
-juce_generate_juce_header(ReharmStudioTests)
-
-target_link_libraries(ReharmStudioTests PRIVATE
-    juce::juce_core
-    juce::juce_audio_basics
-    juce::juce_audio_processors
-    juce::juce_audio_utils
-    juce::juce_audio_devices
-    juce::juce_events
-    juce::juce_graphics
-    juce::juce_gui_basics
-)
-endif()
 
 target_sources(ReharmStudio PRIVATE
     Source/Main.cpp
@@ -67,16 +29,15 @@ target_sources(ReharmStudio PRIVATE
     Source/ChordTheory.cpp
 )
 
-target_sources(PluginLoadTest PRIVATE
-    Source/PluginLoadTest.cpp
-)
-
 target_compile_definitions(ReharmStudio PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_PLUGINHOST_VST3=1
 )
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_definitions(ReharmStudio PRIVATE REHARM_DEBUG_LOG=1)
+endif()
 
 target_link_libraries(ReharmStudio PRIVATE
     juce::juce_audio_basics
@@ -93,12 +54,77 @@ target_link_libraries(ReharmStudio PRIVATE
     juce::juce_gui_extra
 )
 
+# ============================================================================
+# Tests (enable with BUILD_TESTS=ON)
+# ============================================================================
+option(BUILD_TESTS "Build the test suite" OFF)
+
+if(BUILD_TESTS)
+juce_add_gui_app(ReharmStudioTests
+    PRODUCT_NAME "Reharm Studio Tests"
+)
+
+juce_generate_juce_header(ReharmStudioTests)
+
+target_sources(ReharmStudioTests PRIVATE
+    Tests/TestRunner.cpp
+    Tests/TimingTest.cpp
+    Tests/ChordProgressionTest.cpp
+    Tests/ChordTheoryTest.cpp
+    Tests/AudioEngineTest.cpp
+    Source/MainComponent.cpp
+    Source/ChordProgressionGenerator.cpp
+    Source/ChordTheory.cpp
+    Source/AudioEngine.cpp
+)
+
+target_compile_definitions(ReharmStudioTests PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_PLUGINHOST_VST3=1
+)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_definitions(ReharmStudioTests PRIVATE REHARM_DEBUG_LOG=1)
+endif()
+
+target_link_libraries(ReharmStudioTests PRIVATE
+    juce::juce_core
+    juce::juce_audio_basics
+    juce::juce_audio_processors
+    juce::juce_audio_utils
+    juce::juce_audio_devices
+    juce::juce_events
+    juce::juce_graphics
+    juce::juce_gui_basics
+)
+endif()
+
+# ============================================================================
+# Experiments (enable with BUILD_EXPERIMENTS=ON)
+# ============================================================================
+option(BUILD_EXPERIMENTS "Build experiment/proof-of-concept programs" OFF)
+
+if(BUILD_EXPERIMENTS)
+juce_add_gui_app(PluginLoadTest
+    PRODUCT_NAME "Plugin Load Test"
+)
+
+juce_generate_juce_header(PluginLoadTest)
+
+target_sources(PluginLoadTest PRIVATE
+    Experiments/PluginLoadTest.cpp
+)
+
 target_compile_definitions(PluginLoadTest PRIVATE
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_PLUGINHOST_VST3=1
 )
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_definitions(PluginLoadTest PRIVATE REHARM_DEBUG_LOG=1)
+endif()
 
 target_link_libraries(PluginLoadTest PRIVATE
     juce::juce_audio_basics
@@ -110,3 +136,4 @@ target_link_libraries(PluginLoadTest PRIVATE
     juce::juce_graphics
     juce::juce_gui_basics
 )
+endif()

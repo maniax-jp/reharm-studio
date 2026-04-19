@@ -3,16 +3,105 @@
   "configurePresets": [
     {
       "name": "default",
-      "displayName": "Default Config",
+      "displayName": "Default (Debug)",
+      "description": "Debug build of the main app only",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/build"
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_TESTS": "OFF",
+        "BUILD_EXPERIMENTS": "OFF"
+      }
+    },
+    {
+      "name": "debug-tests",
+      "displayName": "Debug + Tests",
+      "description": "Debug build with main app and tests",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build",
+      "inherits": "default",
+      "cacheVariables": {
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "debug-experiments",
+      "displayName": "Debug + Experiments",
+      "description": "Debug build with main app and experiments",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build",
+      "inherits": "default",
+      "cacheVariables": {
+        "BUILD_EXPERIMENTS": "ON"
+      }
+    },
+    {
+      "name": "debug-all",
+      "displayName": "Debug + All Targets",
+      "description": "Debug build with all targets",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build",
+      "inherits": "default",
+      "cacheVariables": {
+        "BUILD_TESTS": "ON",
+        "BUILD_EXPERIMENTS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Release build of the main app only (final verification before release)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64"
+      }
+    },
+    {
+      "name": "release-all",
+      "displayName": "Release + All Targets",
+      "description": "Release build with all targets",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build",
+      "inherits": "release",
+      "cacheVariables": {
+        "BUILD_TESTS": "ON",
+        "BUILD_EXPERIMENTS": "ON"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "default",
-      "displayName": "Default Build",
+      "displayName": "Default (Debug)",
       "configurePreset": "default"
+    },
+    {
+      "name": "debug-tests",
+      "displayName": "Debug + Tests",
+      "configurePreset": "debug-tests"
+    },
+    {
+      "name": "debug-experiments",
+      "displayName": "Debug + Experiments",
+      "configurePreset": "debug-experiments"
+    },
+    {
+      "name": "debug-all",
+      "displayName": "Debug + All Targets",
+      "configurePreset": "debug-all"
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "release-all",
+      "displayName": "Release + All Targets",
+      "configurePreset": "release-all"
     }
   ]
 }
