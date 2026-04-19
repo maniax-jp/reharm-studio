@@ -137,7 +137,8 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
             try
             {
                 mPluginInstance->processBlock (tempBuffer, midiMessages);
-                buffer.copyFrom (0, 0, tempBuffer, 0, 0, buffer.getNumSamples());
+                for (int ch = 0; ch < numDeviceCh; ++ch)
+                    buffer.copyFrom (ch, 0, tempBuffer, ch, 0, buffer.getNumSamples());
             }
             catch (...)
             {
