@@ -279,7 +279,7 @@ int main (int argc, char* argv[])
     if (! opts.noEditor)
     {
         std::cout << "[PST] createEditorIfNeeded" << std::flush << std::endl;
-        auto* editor = plugin->createEditorIfNeeded();
+        auto* editor = plugin->createEditorAndMakeActive();
 
         if (editor != nullptr)
         {

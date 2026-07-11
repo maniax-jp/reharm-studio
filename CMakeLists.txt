@@ -14,7 +14,8 @@ include(FetchContent)
 FetchContent_Declare(
     JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG 501c07674e1ad693085a7e7c398f205c2677f5da # 8.0.12 (旧submoduleと同一コミット)
+    GIT_TAG 8.0.14
+    GIT_SHALLOW TRUE
     GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(JUCE)
