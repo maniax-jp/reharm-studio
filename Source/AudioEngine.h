@@ -2,6 +2,8 @@
 
 #include <JuceHeader.h>
 #include <atomic>
+#include <cmath>
+#include <cstdint>
 #include <memory>
 
 /**
@@ -31,6 +33,37 @@ struct ChordData
 class AudioEngine
 {
 public:
+    /** Host playhead so plugins always see valid tempo/position (never zeroed ProcessContext). */
+    class HostPlayHead : public juce::AudioPlayHead
+    {
+    public:
+        juce::Optional<juce::AudioPlayHead::PositionInfo> getPosition() const override
+        {
+            juce::AudioPlayHead::PositionInfo info;
+            const double sr  = sampleRate.load();
+            const auto  smp  = samples.load();
+            const double sec = sr > 0 ? (double) smp / sr : 0.0;
+            const double curBpm = bpm.load();
+            const double ppqPos = ppq.load();
+            info.setBpm(curBpm);
+            info.setTimeSignature(juce::AudioPlayHead::TimeSignature{4, 4});
+            info.setTimeInSamples((juce::int64) smp);
+            info.setTimeInSeconds(sec);
+            info.setPpqPosition(ppqPos);
+            info.setPpqPositionOfLastBarStart(std::floor(ppqPos / 4.0) * 4.0);
+            info.setIsPlaying(playing.load());
+            info.setIsRecording(false);
+            info.setIsLooping(false);
+            return info;
+        }
+
+        std::atomic<double>  bpm { 120.0 };
+        std::atomic<bool>    playing { false };
+        std::atomic<int64_t> samples { 0 };
+        std::atomic<double>  sampleRate { 44100.0 };
+        std::atomic<double>  ppq { 0.0 };
+    };
+
     AudioEngine();
     ~AudioEngine();
 
@@ -54,11 +87,17 @@ public:
     void loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize);
 
 private:
+    // Playhead must outlive the plugin (plugin holds a raw pointer via setPlayHead).
+    HostPlayHead mPlayHead;
+
     // Plugin and Audio state
     std::unique_ptr<juce::AudioPluginInstance> mPluginInstance;
     juce::CriticalSection pluginLock;
     std::atomic<bool> mPluginReady { false };
     double mSampleRate = 44100.0;
+
+    // Preallocated scratch buffer for plugin processing (no heap alloc on audio thread).
+    juce::AudioBuffer<float> mTempBuffer;
 
     // Thread-safe parameters
     std::atomic<int> mBpm { 120 };
