@@ -13,7 +13,8 @@ public:
                                 juce::Colours::darkgrey,
                                 juce::DocumentWindow::closeButton)
     {
-        setContentNonOwned (editor, true);
+        setUsingNativeTitleBar (true);
+        setContentOwned (editor, true);
         setResizable (false, false); // Default to non-resizable
         centreWithSize (editor->getWidth(), editor->getHeight());
     }
@@ -58,7 +59,6 @@ private:
     void playChordProgression();
     void stopPlayback();
 
-    juce::AudioDeviceManager deviceManager;
     std::unique_ptr<AudioEngine> audioEngine;
 
     juce::TextButton loadButton { "Load VST3" };

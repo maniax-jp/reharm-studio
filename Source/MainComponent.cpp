@@ -90,13 +90,13 @@ MainComponent::MainComponent()
     bpmLabel.setText ("BPM: 120", false);
     bpmLabel.setReadOnly (true);
 
-    deviceManager.initialise (2, 2, nullptr, true);
-    setAudioChannels (2, 2);
+    setAudioChannels (0, 2);
 }
 
 MainComponent::~MainComponent()
 {
     stopPlayback();
+    editorWindow.reset();
     shutdownAudio();
 }
 
@@ -279,13 +279,16 @@ void MainComponent::loadPlugin()
                                       auto setup = deviceManager.getAudioDeviceSetup();
                                       double sampleRate = setup.sampleRate;
                                       int blockSize = setup.bufferSize;
+                                      if (sampleRate <= 0.0)
+                                          sampleRate = 44100.0;
+                                      if (blockSize <= 0)
+                                          blockSize = 512;
 
-                                      debugLog ("loadPlugin: closing audio device (SR=" + juce::String (sampleRate) + ", BS=" + juce::String (blockSize) + ")");
-                                      deviceManager.closeAudioDevice();
-                                      debugLog ("loadPlugin: audio device closed");
+                                      debugLog ("loadPlugin: using device setup SR=" + juce::String (sampleRate)
+                                                + ", BS=" + juce::String (blockSize)
+                                                + " (device stays open; load gated via beginPluginLoad)");
 
                                       audioEngine->beginPluginLoad();
-                                      juce::Thread::sleep (200);
 
                                       debugLog ("loadPlugin: calling createInstanceFromDescription...");
                                       juce::String error;
@@ -299,11 +302,6 @@ void MainComponent::loadPlugin()
                                       {
                                           debugLog ("loadPlugin: createInstanceFromDescription succeeded");
 
-                                          // Reinitialize audio device BEFORE loadPluginInstance (which calls prepareToPlay)
-                                          debugLog ("loadPlugin: reinitializing audio device...");
-                                          deviceManager.initialise (0, 2, nullptr, true);
-                                          debugLog ("loadPlugin: audio device reinitialized");
-
                                           auto pluginName = pluginInstance->getName();
                                           audioEngine->loadPluginInstance (std::move (pluginInstance), sampleRate, blockSize);
                                           debugLog ("Plugin loaded successfully");
@@ -314,10 +312,6 @@ void MainComponent::loadPlugin()
                                       }
                                       else
                                       {
-                                          // Reinitialize audio device even on failure
-                                          debugLog ("loadPlugin: reinitializing audio device...");
-                                          deviceManager.initialise (0, 2, nullptr, true);
-                                          debugLog ("loadPlugin: audio device reinitialized");
                                           debugLog ("loadPlugin: createInstanceFromDescription returned nullptr: " + error);
                                       }
                                   }

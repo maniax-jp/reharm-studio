@@ -24,12 +24,21 @@ void AudioEngine::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
 {
     juce::ScopedLock sl (pluginLock);
     mSampleRate = sampleRate;
+    mPlayHead.sampleRate = sampleRate;
 
     if (mPluginInstance != nullptr)
     {
         mPluginInstance->prepareToPlay(sampleRate, samplesPerBlockExpected);
-        std::atomic_store(&mPluginReady, true);
     }
+
+    const int maxCh = juce::jmax (2, mPluginInstance != nullptr
+                                         ? juce::jmax (mPluginInstance->getTotalNumInputChannels(),
+                                                       mPluginInstance->getTotalNumOutputChannels())
+                                         : 2);
+    mTempBuffer.setSize (maxCh, samplesPerBlockExpected);
+
+    if (mPluginInstance != nullptr)
+        std::atomic_store(&mPluginReady, true);
 }
 
 void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -47,6 +56,13 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     // Capture a local reference to the current chord data
     auto chordData = std::atomic_load(&mCurrentChordData);
 
+    // Guard: chord data may have been swapped for a shorter progression while index was large.
+    if (mCurrentChordIndex >= chordData->totalChords)
+        mCurrentChordIndex = 0;
+
+    // Block-start beat position for the playhead (capture before advancing).
+    const double blockStartPpq = mCurrentBeatPosition;
+
     if (mIsPlaying.load())
     {
         int numSamples = buffer.getNumSamples();
@@ -59,56 +75,57 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
         double endBeat = mCurrentBeatPosition;
 
         double totalBeats = (double)chordData->totalChords * 4.0;
-        if (totalBeats <= 0) return;
-
-        // 1. Handle the very first Note On
-        if (startBeat == 0.0 && mCurrentChordIndex < chordData->totalChords)
+        if (totalBeats > 0)
         {
-            for (int note : chordData->notes[0])
-                midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), 0);
-        }
-
-        // 2. Handle transitions (including loop)
-        while (true)
-        {
-            double nextTransitionBeat = (mCurrentChordIndex + 1) * 4.0;
-            if (mCurrentChordIndex == chordData->totalChords - 1)
-                nextTransitionBeat = totalBeats;
-
-            if (nextTransitionBeat > endBeat)
-                break;
-
-            if (nextTransitionBeat >= startBeat)
+            // 1. Handle the very first Note On
+            if (startBeat == 0.0 && mCurrentChordIndex < chordData->totalChords)
             {
-                int relativeOffset = static_cast<int>((nextTransitionBeat - startBeat) / beatsPerSample);
+                for (int note : chordData->notes[0])
+                    midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), 0);
+            }
 
-                for (int note : chordData->notes[mCurrentChordIndex])
-                    midiMessages.addEvent(juce::MidiMessage::noteOff(1, note), relativeOffset);
+            // 2. Handle transitions (including loop)
+            while (true)
+            {
+                double nextTransitionBeat = (mCurrentChordIndex + 1) * 4.0;
+                if (mCurrentChordIndex == chordData->totalChords - 1)
+                    nextTransitionBeat = totalBeats;
 
-                mCurrentChordIndex++;
-                if (mCurrentChordIndex >= chordData->totalChords)
-                    mCurrentChordIndex = 0;
+                if (nextTransitionBeat > endBeat)
+                    break;
 
-                for (int note : chordData->notes[mCurrentChordIndex])
-                    midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), relativeOffset);
-
-                if (nextTransitionBeat == totalBeats)
+                if (nextTransitionBeat >= startBeat)
                 {
-                    startBeat -= totalBeats;
-                    endBeat -= totalBeats;
+                    int relativeOffset = static_cast<int>((nextTransitionBeat - startBeat) / beatsPerSample);
+
+                    for (int note : chordData->notes[mCurrentChordIndex])
+                        midiMessages.addEvent(juce::MidiMessage::noteOff(1, note), relativeOffset);
+
+                    mCurrentChordIndex++;
+                    if (mCurrentChordIndex >= chordData->totalChords)
+                        mCurrentChordIndex = 0;
+
+                    for (int note : chordData->notes[mCurrentChordIndex])
+                        midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), relativeOffset);
+
+                    if (nextTransitionBeat == totalBeats)
+                    {
+                        startBeat -= totalBeats;
+                        endBeat -= totalBeats;
+                    }
+                }
+                else
+                {
+                    mCurrentChordIndex++;
+                    if (mCurrentChordIndex >= chordData->totalChords)
+                        mCurrentChordIndex = 0;
                 }
             }
-            else
-            {
-                mCurrentChordIndex++;
-                if (mCurrentChordIndex >= chordData->totalChords)
-                    mCurrentChordIndex = 0;
-            }
-        }
 
-        // Wrap currentBeatPosition for the next block
-        while (mCurrentBeatPosition >= totalBeats)
-            mCurrentBeatPosition -= totalBeats;
+            // Wrap currentBeatPosition for the next block
+            while (mCurrentBeatPosition >= totalBeats)
+                mCurrentBeatPosition -= totalBeats;
+        }
     }
     else if (mStopRequested.load())
     {
@@ -122,21 +139,27 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
         mCurrentBeatPosition = 0.0;
     }
 
+    // Keep host playhead in sync before plugin processBlock (plugins read tempo/position here).
+    mPlayHead.sampleRate = mSampleRate;
+    mPlayHead.bpm = (double) mBpm.load();
+    mPlayHead.playing = mIsPlaying.load();
+    mPlayHead.ppq = blockStartPpq;
+
     {
         juce::ScopedLock sl (pluginLock);
         if (mPluginInstance != nullptr && std::atomic_load(&mPluginReady))
         {
             int numDeviceCh = buffer.getNumChannels();
             int numPluginOut = mPluginInstance->getTotalNumOutputChannels();
-            int numCh = jmax (numDeviceCh, numPluginOut);
-            juce::AudioBuffer<float> tempBuffer (numCh, buffer.getNumSamples());
-            tempBuffer.clear();
+            int numCh = juce::jmax (numDeviceCh, numPluginOut);
+            mTempBuffer.setSize (numCh, buffer.getNumSamples(), false, false, true);
+            mTempBuffer.clear();
 
             try
             {
-                mPluginInstance->processBlock (tempBuffer, midiMessages);
+                mPluginInstance->processBlock (mTempBuffer, midiMessages);
                 for (int ch = 0; ch < numDeviceCh; ++ch)
-                    buffer.copyFrom (ch, 0, tempBuffer, ch, 0, buffer.getNumSamples());
+                    buffer.copyFrom (ch, 0, mTempBuffer, ch, 0, buffer.getNumSamples());
             }
             catch (...)
             {
@@ -144,6 +167,8 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
             }
         }
     }
+
+    mPlayHead.samples += buffer.getNumSamples();
     buffer.applyGain(mVolume.load());
 }
 
@@ -161,6 +186,8 @@ void AudioEngine::setPluginInstance(std::unique_ptr<juce::AudioPluginInstance> p
     if (mPluginInstance != nullptr)
         mPluginInstance->releaseResources();
     mPluginInstance = std::move(plugin);
+    if (mPluginInstance != nullptr)
+        mPluginInstance->setPlayHead (&mPlayHead);
 }
 
 void AudioEngine::loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize)
@@ -171,9 +198,19 @@ void AudioEngine::loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> 
         if (mPluginInstance != nullptr)
             mPluginInstance->releaseResources();
         mPluginInstance = std::move(plugin);
+        if (mPluginInstance != nullptr)
+            mPluginInstance->setPlayHead (&mPlayHead);
     }
 
-    mPluginInstance->prepareToPlay (sampleRate, blockSize);
+    if (mPluginInstance != nullptr)
+    {
+        mPluginInstance->prepareToPlay (sampleRate, blockSize);
+
+        // Size scratch buffer while mPluginReady is still false.
+        const int maxCh = juce::jmax (2, juce::jmax (mPluginInstance->getTotalNumInputChannels(),
+                                                      mPluginInstance->getTotalNumOutputChannels()));
+        mTempBuffer.setSize (maxCh, blockSize);
+    }
 
     juce::ScopedLock sl (pluginLock);
     std::atomic_store(&mPluginReady, true);
@@ -187,9 +224,18 @@ void AudioEngine::loadPlugin(std::unique_ptr<juce::AudioPluginInstance> plugin, 
         if (mPluginInstance != nullptr)
             mPluginInstance->releaseResources();
         mPluginInstance = std::move(plugin);
+        if (mPluginInstance != nullptr)
+            mPluginInstance->setPlayHead (&mPlayHead);
     }
 
-    mPluginInstance->prepareToPlay (sampleRate, blockSize);
+    if (mPluginInstance != nullptr)
+    {
+        mPluginInstance->prepareToPlay (sampleRate, blockSize);
+
+        const int maxCh = juce::jmax (2, juce::jmax (mPluginInstance->getTotalNumInputChannels(),
+                                                      mPluginInstance->getTotalNumOutputChannels()));
+        mTempBuffer.setSize (maxCh, blockSize);
+    }
 
     juce::ScopedLock sl (pluginLock);
     std::atomic_store(&mPluginReady, true);
@@ -214,6 +260,8 @@ void AudioEngine::startPlayback()
 {
     mCurrentChordIndex = 0;
     mCurrentBeatPosition = 0.0;
+    mPlayHead.samples = 0;
+    mPlayHead.ppq = 0.0;
     std::atomic_store(&mIsPlaying, true);
 }
 
