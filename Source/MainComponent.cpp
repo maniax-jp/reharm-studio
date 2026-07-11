@@ -234,7 +234,7 @@ void MainComponent::openPluginEditor()
     }
 
     debugLog ("openPluginEditor: creating editor (plugin=" + plugin->getName() + ")");
-    auto* editor = plugin->createEditorIfNeeded();
+    auto* editor = plugin->createEditorAndMakeActive();
     if (editor != nullptr)
     {
         debugLog ("openPluginEditor: editor created, creating window");
