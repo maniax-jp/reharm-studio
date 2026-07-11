@@ -136,4 +136,36 @@ target_link_libraries(PluginLoadTest PRIVATE
     juce::juce_graphics
     juce::juce_gui_basics
 )
+
+juce_add_gui_app(PresetSwitchTest
+    PRODUCT_NAME "Preset Switch Test"
+)
+
+juce_generate_juce_header(PresetSwitchTest)
+
+target_sources(PresetSwitchTest PRIVATE
+    Experiments/PresetSwitchTest.cpp
+)
+
+target_compile_definitions(PresetSwitchTest PRIVATE
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_PLUGINHOST_VST3=1
+    JUCE_MODAL_LOOPS_PERMITTED=1
+)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    target_compile_definitions(PresetSwitchTest PRIVATE REHARM_DEBUG_LOG=1)
+endif()
+
+target_link_libraries(PresetSwitchTest PRIVATE
+    juce::juce_audio_basics
+    juce::juce_audio_devices
+    juce::juce_audio_plugin_client
+    juce::juce_audio_processors
+    juce::juce_core
+    juce::juce_events
+    juce::juce_graphics
+    juce::juce_gui_basics
+)
 endif()
