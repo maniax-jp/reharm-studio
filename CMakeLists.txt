@@ -9,7 +9,15 @@ endif()
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_subdirectory(JUCE)
+include(FetchContent)
+
+FetchContent_Declare(
+    JUCE
+    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+    GIT_TAG 501c07674e1ad693085a7e7c398f205c2677f5da # 8.0.12 (旧submoduleと同一コミット)
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(JUCE)
 
 # ============================================================================
 # Main App (always built)
