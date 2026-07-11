@@ -79,9 +79,9 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 # リポジトリをクローン
 git clone https://github.com/maniax-jp/reharm-studio.git
 cd reharm-studio
-git submodule update --init --recursive
 
 # 本体のDebugビルド（デフォルト）
+# ※ JUCE は CMake 構成時に FetchContent で自動取得されます
 cmake --preset default
 cmake --build --preset default
 ```
