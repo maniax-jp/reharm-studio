@@ -139,13 +139,14 @@ public:
         beginTest ("Presets: all() size and entry counts");
         {
             const auto& presets = ProgressionPresets::all();
-            expectEquals ((int) presets.size(), 6);
+            expectEquals ((int) presets.size(), 7);
             expectEquals ((int) presets [0].entries.size(), 4); // Royal Road
             expectEquals ((int) presets [1].entries.size(), 8); // Canon
             expectEquals ((int) presets [2].entries.size(), 4); // Pop Punk
             expectEquals ((int) presets [3].entries.size(), 4); // Komuro
             expectEquals ((int) presets [4].entries.size(), 4); // Marunouchi
             expectEquals ((int) presets [5].entries.size(), 8); // Autumn Leaves
+            expectEquals ((int) presets [6].entries.size(), 8); // Fly Me to the Moon
         }
 
         beginTest ("applyToModel: Royal Road in C major");
@@ -249,6 +250,37 @@ public:
             expect (c0.has_value());
             expectEquals (c0->rootPitchClass, 5);
             expectEquals ((int) c0->quality, (int) ChordQuality::Major7);
+        }
+
+        beginTest ("applyToModel: Fly Me to the Moon in C major");
+        {
+            ProgressionModel model;
+            model.setKey ({0, true}); // C major
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [6], model);
+
+            expectEquals (model.getNumBars(), 8);
+
+            auto c0 = model.getChord (0, 0);
+            expect (c0.has_value());
+            expectEquals (c0->rootPitchClass, 9);
+            expectEquals ((int) c0->quality, (int) ChordQuality::Minor7);
+
+            auto c3 = model.getChord (3, 0);
+            expect (c3.has_value());
+            expectEquals (c3->rootPitchClass, 0);
+            expectEquals ((int) c3->quality, (int) ChordQuality::Major7);
+
+            auto c5 = model.getChord (5, 0);
+            expect (c5.has_value());
+            expectEquals (c5->rootPitchClass, 11);
+            expectEquals ((int) c5->quality, (int) ChordQuality::Minor7Flat5);
+
+            auto c6 = model.getChord (6, 0);
+            expect (c6.has_value());
+            expectEquals (c6->rootPitchClass, 4);
+            expectEquals ((int) c6->quality, (int) ChordQuality::Dominant7);
         }
     }
 };

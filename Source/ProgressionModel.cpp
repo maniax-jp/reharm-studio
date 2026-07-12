@@ -185,6 +185,18 @@ const std::vector<PresetProgression>& ProgressionPresets::all()
               {9, ChordQuality::Minor7},
               {9, ChordQuality::Minor7}
           }
+        },
+        { "Fly Me to the Moon (vi-ii-V-I-IV-vii-III7-vi)",
+          {
+              {9, ChordQuality::Minor7},
+              {2, ChordQuality::Minor7},
+              {7, ChordQuality::Dominant7},
+              {0, ChordQuality::Major7},
+              {5, ChordQuality::Major7},
+              {11, ChordQuality::Minor7Flat5},
+              {4, ChordQuality::Dominant7},
+              {9, ChordQuality::Minor7}
+          }
         }
     };
     return presets;
