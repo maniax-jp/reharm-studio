@@ -192,7 +192,8 @@ const std::vector<PresetProgression>& ProgressionPresets::all()
 
 void ProgressionPresets::applyToModel (const PresetProgression& preset, ProgressionModel& model)
 {
-    const int tonic = model.getKey().tonicPitchClass;
+    const auto& key = model.getKey();
+    const int tonic = key.isMajor ? key.tonicPitchClass : (key.tonicPitchClass + 3) % 12;
 
     model.setNumBars (static_cast<int> (preset.entries.size()));
     model.clear();

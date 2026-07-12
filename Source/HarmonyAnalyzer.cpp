@@ -20,6 +20,13 @@ int rootOffset (const Chord& c, const KeyContext& key) noexcept
     return normalizePc (c.rootPitchClass - key.tonicPitchClass);
 }
 
+// Offset relative to the preset reference tonic (relative major for minor keys).
+int presetRootOffset (const Chord& c, const KeyContext& key) noexcept
+{
+    const int ref = key.isMajor ? key.tonicPitchClass : (key.tonicPitchClass + 3) % 12;
+    return normalizePc (c.rootPitchClass - ref);
+}
+
 bool isDominantQuality (ChordQuality q) noexcept
 {
     return q == ChordQuality::Dominant7
@@ -550,34 +557,35 @@ std::vector<DetectedPattern> HarmonyAnalyzer::detectPatterns (const ProgressionM
         });
     }
 
-    // ---- 5. Famous progression presets (whole-sequence match) ----
+    // ---- 5. Famous progression presets (consecutive substring match) ----
     {
         const auto& presets = ProgressionPresets::all();
         for (const auto& preset : presets)
         {
-            if (preset.entries.size() != real.size())
-                continue;
-
-            bool match = true;
-            for (size_t k = 0; k < real.size(); ++k)
+            const int n = static_cast<int> (preset.entries.size());
+            for (int s = 0; s + n <= static_cast<int> (real.size()); ++s)
             {
-                const auto& chord = real[k].chord;
-                const auto& entry = preset.entries[k];
-                if (rootOffset (chord, key) != entry.degreeSemitone
-                    || chord.quality != entry.quality)
+                bool match = true;
+                for (int k = 0; k < n; ++k)
                 {
-                    match = false;
-                    break;
+                    const auto& chord = real[static_cast<size_t> (s + k)].chord;
+                    const auto& entry = preset.entries[static_cast<size_t> (k)];
+                    if (presetRootOffset (chord, key) != entry.degreeSemitone
+                        || chord.quality != entry.quality)
+                    {
+                        match = false;
+                        break;
+                    }
                 }
-            }
 
-            if (match)
-            {
-                patterns.push_back ({
-                    preset.name,
-                    real.front().flatIndex,
-                    real.back().flatIndex
-                });
+                if (match)
+                {
+                    patterns.push_back ({
+                        preset.name,
+                        real[static_cast<size_t> (s)].flatIndex,
+                        real[static_cast<size_t> (s + n - 1)].flatIndex
+                    });
+                }
             }
         }
     }

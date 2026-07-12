@@ -5,8 +5,9 @@
 #include "ProgressionModel.h"
 
 /**
- * Top bar: title, key/scale, preset picker, Degree|Name and Close|Open toggles.
+ * Top bar: title, key/scale, preset picker, Close|Open toggle.
  */
+
 class HeaderBar : public juce::Component
 {
 public:
@@ -14,13 +15,12 @@ public:
     ~HeaderBar() override = default;
 
     void setKey (int tonicPitchClass, bool isMajor);
-    void setShowDegree (bool showDegree);
     void setVoicingClose (bool close);
 
     std::function<void (int tonicPitchClass, bool isMajor)> onKeyChanged;
     std::function<void (const reharm::PresetProgression&)> onPresetSelected;
-    std::function<void (bool showDegree)> onShowDegreeChanged;
     std::function<void (bool closeVoicing)> onVoicingChanged;
+
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -29,8 +29,8 @@ private:
     juce::ComboBox keyBox;
     juce::ComboBox scaleBox;
     juce::ComboBox presetBox;
-    SegmentedToggle degreeToggle { "Deg", "Name" };
     SegmentedToggle voicingToggle { "Close", "Open" };
+
 
     void handleKeyOrScaleChanged();
     void handlePresetChanged();

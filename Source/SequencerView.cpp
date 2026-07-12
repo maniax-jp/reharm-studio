@@ -268,11 +268,10 @@ void SequencerView::paintCell (juce::Graphics& g, int barIndex, int slotIndex,
     }
 
     const auto& key = model->getKey();
-    const bool showDegree = display != nullptr && display->showDegree;
-    const juce::String name = reharm::ChordModel::chordName (*chord);
-    const juce::String degree = reharm::ChordModel::degreeName (*chord, key);
-    const juce::String primary = showDegree ? degree : name;
-    const juce::String secondary = showDegree ? name : degree;
+    // Fixed layout: chord name is always primary, degree is always secondary.
+    const juce::String primary = reharm::ChordModel::chordName (*chord);
+    const juce::String secondary = reharm::ChordModel::degreeName (*chord, key);
+
 
     // Primary chord label
     g.setColour (theme::text);
@@ -290,14 +289,53 @@ void SequencerView::paintCell (juce::Graphics& g, int barIndex, int slotIndex,
     if (analysis != nullptr && ! analysis->diatonic && analysis->label.isNotEmpty())
     {
         g.setFont (theme::font (11.0f, true));
-        const int bw = juce::roundToInt (juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), reharm::loc::trLabel (analysis->label))) + 10;
-        const int bh = 16;
-        auto badge = juce::Rectangle<float> (r.getX() + 4.0f, r.getY() + 6.0f, (float) bw, (float) bh);
-        g.setColour (theme::nonDiatonic.withAlpha (0.20f));
-        g.fillRoundedRectangle (badge, 4.0f);
-        g.setColour (theme::nonDiatonic);
-        g.drawText (reharm::loc::trLabel (analysis->label), badge.toNearestInt(), juce::Justification::centred, false);
+        const auto& badgeFont = g.getCurrentFont();
+
+        // Modal interchange: two-line badge with the full label plus the borrowed
+        // mode name in parens, e.g. "Modal Interchange" / "(Dorian)".
+        // borrowedScale is formatted like "C Dorian" / "A Harmonic minor":
+        // tonic name first, mode name after the first space.
+        if (analysis->technique == reharm::NonDiatonicTechnique::ModalInterchange
+            && analysis->borrowedScale.isNotEmpty())
+        {
+            const int spaceIdx = analysis->borrowedScale.indexOf (" ");
+            const juce::String modeName = spaceIdx >= 0
+                                              ? analysis->borrowedScale.substring (spaceIdx + 1)
+                                              : analysis->borrowedScale;
+            const juce::String line1 = reharm::loc::tr ("M.I.");
+            const juce::String line2 = "(" + reharm::loc::tr (modeName) + ")";
+
+            const int w1 = juce::roundToInt (juce::GlyphArrangement::getStringWidth (badgeFont, line1));
+            const int w2 = juce::roundToInt (juce::GlyphArrangement::getStringWidth (badgeFont, line2));
+            int bw = juce::jmax (w1, w2) + 10;
+            const int maxW = bounds.getWidth() - 8;
+            if (bw > maxW)
+                bw = maxW;
+            const int bh = 28; // two lines, ~12px each + padding
+
+            auto badge = juce::Rectangle<float> (r.getX() + 4.0f, r.getY() + 6.0f, (float) bw, (float) bh);
+            g.setColour (theme::nonDiatonic.withAlpha (0.20f));
+            g.fillRoundedRectangle (badge, 4.0f);
+            g.setColour (theme::nonDiatonic);
+
+            auto badgeInt = badge.toNearestInt();
+            auto line1Area = badgeInt.removeFromTop (badgeInt.getHeight() / 2);
+            g.drawText (line1, line1Area, juce::Justification::centred, true);
+            g.drawText (line2, badgeInt, juce::Justification::centred, true);
+        }
+        else
+        {
+            const juce::String badgeText = reharm::loc::trLabel (analysis->label);
+            const int bw = juce::roundToInt (juce::GlyphArrangement::getStringWidth (badgeFont, badgeText)) + 10;
+            const int bh = 16;
+            auto badge = juce::Rectangle<float> (r.getX() + 4.0f, r.getY() + 6.0f, (float) bw, (float) bh);
+            g.setColour (theme::nonDiatonic.withAlpha (0.20f));
+            g.fillRoundedRectangle (badge, 4.0f);
+            g.setColour (theme::nonDiatonic);
+            g.drawText (badgeText, badge.toNearestInt(), juce::Justification::centred, false);
+        }
     }
+
 }
 
 void SequencerView::hitTest (juce::Point<int> pos)
@@ -312,12 +350,11 @@ void SequencerView::hitTest (juce::Point<int> pos)
         if (! barBounds[i].contains (pos))
             continue;
 
-        // Ghost bar: activate up to this bar
+        // Ghost bar: activate up to this bar, then fall through so the click also
+        // places a default chord in the clicked cell and selects it.
         if (i >= numBars)
-        {
             model->setNumBars (i + 1);
-            return;
-        }
+
 
         // Subdivision segments
         static const reharm::BarSubdivision subs[3] = {
@@ -350,9 +387,12 @@ void SequencerView::hitTest (juce::Point<int> pos)
                                                        reharm::ChordQuality::Major, -1 });
             }
 
+            // Always select the clicked cell after any placement so the selection
+            // frame is shown and the editor panel opens.
             if (onCellSelected)
                 onCellSelected (i, s);
             return;
+
         }
 
         return;
