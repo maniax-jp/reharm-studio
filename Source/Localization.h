@@ -1,0 +1,76 @@
+#pragma once
+
+#include <juce_core/juce_core.h>
+
+namespace reharm
+{
+
+/**
+ * UI 表示用の日本語ローカライズ。
+ * 委任実装コードは ASCII のみのため、非ASCII文字列はこのヘッダに集約し、
+ * 必ず juce::String::fromUTF8 経由で生成する (const char* 直接代入は
+ * juce_String の ASCII アサーションに引っかかるため禁止)。
+ */
+namespace loc
+{
+
+/** English key -> Japanese display string. Falls back to the input. */
+inline juce::String tr (const juce::String& key)
+{
+    struct Entry { const char* key; const char* utf8; };
+
+    static const Entry table[] =
+    {
+        // Pattern names (HarmonyAnalyzer::detectPatterns)
+        { "Two-Five-One",        "\xE3\x83\x84\xE3\x83\xBC\xE3\x83\x95\xE3\x82\xA1\xE3\x82\xA4\xE3\x83\x96\xE3\x83\xAF\xE3\x83\xB3" },                    // ツーファイブワン
+        { "Strong Progression",  "\xE5\xBC\xB7\xE9\x80\xB2\xE8\xA1\x8C" },                                                                                  // 強進行
+        { "Leading Resolution",  "\xE9\x99\x90\xE5\xAE\x9A\xE9\x80\xB2\xE8\xA1\x8C" },                                                                      // 限定進行
+        { "Cliche",              "\xE3\x82\xAF\xE3\x83\xAA\xE3\x82\xB7\xE3\x82\xA7" },                                                                      // クリシェ
+
+        // Preset progression names (ProgressionPresets::all)
+        { "Royal Road (IV-V-iii-vi)",             "\xE7\x8E\x8B\xE9\x81\x93\xE9\x80\xB2\xE8\xA1\x8C" },                                                     // 王道進行
+        { "Canon (I-V-vi-iii-IV-I-IV-V)",         "\xE3\x82\xAB\xE3\x83\x8E\xE3\x83\xB3\xE9\x80\xB2\xE8\xA1\x8C" },                                         // カノン進行
+        { "Pop Punk (I-V-vi-IV)",                 "\xE3\x83\x9D\xE3\x83\x83\xE3\x83\x97\xE3\x83\x91\xE3\x83\xB3\xE3\x82\xAF\xE9\x80\xB2\xE8\xA1\x8C" },     // ポップパンク進行
+        { "Komuro (vi-IV-V-I)",                   "\xE5\xB0\x8F\xE5\xAE\xA4\xE9\x80\xB2\xE8\xA1\x8C" },                                                     // 小室進行
+        { "Marunouchi (IVM7-III7-vim7-I7)",       "\xE4\xB8\xB8\xE3\x82\xB5\xE9\x80\xB2\xE8\xA1\x8C" },                                                     // 丸サ進行
+        { "Autumn Leaves (ii-V-I-IV-vii-III7-vi)","\xE6\x9E\xAF\xE8\x91\x89\xE9\x80\xB2\xE8\xA1\x8C" },                                                     // 枯葉進行
+
+        // Non-diatonic technique labels (ChordAnalysis::label prefixes)
+        { "Picardy",             "\xE3\x83\x94\xE3\x82\xAB\xE3\x83\xAB\xE3\x83\x87\xE3\x82\xA3\xE7\xB5\x82\xE6\xAD\xA2" },                                  // ピカルディ終止
+        { "Dbl.Dom",             "\xE3\x83\x89\xE3\x83\x83\xE3\x83\x9A\xE3\x83\xAB\xE3\x83\x89\xE3\x83\x9F\xE3\x83\x8A\xE3\x83\xB3\xE3\x83\x88" },          // ドッペルドミナント
+        { "Tritone Sub",         "\xE8\xA3\x8F\xE3\x82\xB3\xE3\x83\xBC\xE3\x83\x89" },                                                                      // 裏コード
+        { "Pass.Dim",            "\xE3\x83\x91\xE3\x83\x83\xE3\x82\xB7\xE3\x83\xB3\xE3\x82\xB0\xE3\x83\x87\xE3\x82\xA3\xE3\x83\x9F\xE3\x83\x8B\xE3\x83\x83\xE3\x82\xB7\xE3\x83\xA5" }, // パッシングディミニッシュ
+        { "Rel.IIm",             "\xE3\x83\xAA\xE3\x83\xAC\xE3\x82\xA4\xE3\x83\x86\xE3\x83\x83\xE3\x83\x89\xE3\x83\x84\xE3\x83\xBC\xE3\x83\x9E\xE3\x82\xA4\xE3\x83\x8A\xE3\x83\xBC" }, // リレイテッドツーマイナー
+        { "Subdom.Minor",        "\xE3\x82\xB5\xE3\x83\x96\xE3\x83\x89\xE3\x83\x9F\xE3\x83\x8A\xE3\x83\xB3\xE3\x83\x88\xE3\x83\x9E\xE3\x82\xA4\xE3\x83\x8A\xE3\x83\xBC" },             // サブドミナントマイナー
+        { "M.I.",                "\xE3\x83\xA2\xE3\x83\xBC\xE3\x83\x80\xE3\x83\xAB\xE3\x82\xA4\xE3\x83\xB3\xE3\x82\xBF\xE3\x83\xBC\xE3\x83\x81\xE3\x82\xA7\xE3\x83\xB3\xE3\x82\xB8" }, // モーダルインターチェンジ
+        { "Sec.Dom",             "\xE3\x82\xBB\xE3\x82\xAB\xE3\x83\xB3\xE3\x83\x80\xE3\x83\xAA\xE3\x83\xBC\xE3\x83\x89\xE3\x83\x9F\xE3\x83\x8A\xE3\x83\xB3\xE3\x83\x88" },             // セカンダリードミナント
+        { "Non-diatonic",        "\xE3\x83\x8E\xE3\x83\xB3\xE3\x83\x80\xE3\x82\xA4\xE3\x82\xA2\xE3\x83\x88\xE3\x83\x8B\xE3\x83\x83\xE3\x82\xAF" },          // ノンダイアトニック
+
+        // Substitution labels
+        { "Dairi",               "\xE4\xBB\xA3\xE7\x90\x86" },                                                                                              // 代理
+        { "Ura",                 "\xE8\xA3\x8F\xE3\x82\xB3\xE3\x83\xBC\xE3\x83\x89" },                                                                      // 裏コード
+        { "Dominantize",         "\xE3\x83\x89\xE3\x83\x9F\xE3\x83\x8A\xE3\x83\xB3\xE3\x83\x88\xE5\x8C\x96" },                                              // ドミナント化
+
+        // Misc UI
+        { "No pattern detected", "\xE3\x83\x91\xE3\x82\xBF\xE3\x83\xBC\xE3\x83\xB3\xE6\x9C\xAA\xE6\xA4\x9C\xE5\x87\xBA" },                                  // パターン未検出
+        { "No Plugin",           "\xE3\x83\x97\xE3\x83\xA9\xE3\x82\xB0\xE3\x82\xA4\xE3\x83\xB3\xE6\x9C\xAA\xE3\x83\xAD\xE3\x83\xBC\xE3\x83\x89" },          // プラグイン未ロード
+    };
+
+    for (const auto& e : table)
+        if (key == e.key)
+            return juce::String::fromUTF8 (e.utf8);
+
+    return key;
+}
+
+/** Translates a label that may have a suffix, e.g. "Sec.Dom (V7/II)" -> Japanese + " (V7/II)". */
+inline juce::String trLabel (const juce::String& label)
+{
+    const int paren = label.indexOf (" (");
+    if (paren > 0)
+        return tr (label.substring (0, paren)) + label.substring (paren);
+    return tr (label);
+}
+
+} // namespace loc
+} // namespace reharm

@@ -36,6 +36,15 @@ target_sources(ReharmStudio PRIVATE
     Source/ChordProgressionGenerator.cpp
     Source/AudioEngine.cpp
     Source/ChordTheory.cpp
+    Source/ChordModel.cpp
+    Source/ProgressionModel.cpp
+    Source/HarmonyAnalyzer.cpp
+    Source/Theme.cpp
+    Source/HeaderBar.cpp
+    Source/SequencerView.cpp
+    Source/AnalysisStrip.cpp
+    Source/ChordEditorPanel.cpp
+    Source/TransportBar.cpp
 )
 
 target_compile_definitions(ReharmStudio PRIVATE
@@ -81,10 +90,22 @@ target_sources(ReharmStudioTests PRIVATE
     Tests/ChordProgressionTest.cpp
     Tests/ChordTheoryTest.cpp
     Tests/AudioEngineTest.cpp
+    Tests/ChordModelTest.cpp
+    Tests/ProgressionModelTest.cpp
+    Tests/HarmonyAnalyzerTest.cpp
     Source/MainComponent.cpp
     Source/ChordProgressionGenerator.cpp
     Source/ChordTheory.cpp
     Source/AudioEngine.cpp
+    Source/ChordModel.cpp
+    Source/ProgressionModel.cpp
+    Source/HarmonyAnalyzer.cpp
+    Source/Theme.cpp
+    Source/HeaderBar.cpp
+    Source/SequencerView.cpp
+    Source/AnalysisStrip.cpp
+    Source/ChordEditorPanel.cpp
+    Source/TransportBar.cpp
 )
 
 target_compile_definitions(ReharmStudioTests PRIVATE

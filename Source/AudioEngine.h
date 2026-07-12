@@ -13,16 +13,34 @@
 struct ChordData
 {
     std::vector<std::vector<int>> notes;
+    std::vector<double> beats;
     int totalChords = 0;
+    double totalBeats = 0.0;
 
     ChordData() = default;
-    ChordData(const juce::Array<juce::Array<int>>& juceNotes)
+
+    // Existing constructor: assigns 4.0 beats per chord.
+    ChordData (const juce::Array<juce::Array<int>>& juceNotes)
     {
         totalChords = juceNotes.size();
         for (const auto& chord : juceNotes)
         {
             notes.emplace_back(chord.begin(), chord.end());
+            beats.push_back(4.0);
         }
+        totalBeats = (double) totalChords * 4.0;
+    }
+
+    // New constructor with explicit per-slot durations.
+    ChordData (std::vector<std::vector<int>> newNotes, std::vector<double> newBeats)
+    {
+        jassert(newNotes.size() == newBeats.size());
+        const auto sz = std::min(newNotes.size(), newBeats.size());
+        notes.assign(newNotes.begin(), newNotes.begin() + sz);
+        beats.assign(newBeats.begin(), newBeats.begin() + sz);
+        totalChords = static_cast<int>(sz);
+        for (double b : beats)
+            totalBeats += b;
     }
 };
 
@@ -86,6 +104,10 @@ public:
     bool isPluginLoading() const { return mLoadingPlugin.load(); }
     void loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize);
 
+    /** Index of the slot currently sounding, or -1 when stopped. Safe from any thread. */
+    int getCurrentPlayingSlot() const
+    { return mPlayingSlotShared.load(std::memory_order_relaxed); }
+
 private:
     // Playhead must outlive the plugin (plugin holds a raw pointer via setPlayHead).
     HostPlayHead mPlayHead;
@@ -112,6 +134,8 @@ private:
     // Playback state (Used only in audio thread)
     int mCurrentChordIndex = 0;
     double mCurrentBeatPosition = 0.0;
+    std::atomic<int> mPlayingSlotShared { -1 };
+    bool mFirstBlock = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

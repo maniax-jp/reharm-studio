@@ -1,9 +1,15 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "ChordProgressionGenerator.h"
 #include "AudioEngine.h"
-#include "ChordTheory.h"
+#include "ProgressionModel.h"
+#include "HarmonyAnalyzer.h"
+#include "Theme.h"
+#include "HeaderBar.h"
+#include "SequencerView.h"
+#include "AnalysisStrip.h"
+#include "ChordEditorPanel.h"
+#include "TransportBar.h"
 
 class PluginEditorWindow : public juce::DocumentWindow
 {
@@ -15,7 +21,7 @@ public:
     {
         setUsingNativeTitleBar (true);
         setContentOwned (editor, true);
-        setResizable (false, false); // Default to non-resizable
+        setResizable (false, false);
         centreWithSize (editor->getWidth(), editor->getHeight());
     }
 
@@ -25,12 +31,8 @@ public:
     }
 };
 
-class MainComponent  : public juce::AudioAppComponent,
-                       public juce::ChangeListener,
-                       public juce::Button::Listener,
-                       public juce::ComboBox::Listener,
-                       public juce::Slider::Listener,
-                       public juce::Timer
+class MainComponent : public juce::AudioAppComponent,
+                      public juce::Timer
 {
 public:
     MainComponent();
@@ -43,40 +45,39 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
 
-    void changeListenerCallback (juce::ChangeBroadcaster* source) override;
-
-    void buttonClicked (juce::Button* button) override;
-    void comboBoxChanged (juce::ComboBox* comboBox) override;
-    void sliderValueChanged (juce::Slider* slider) override;
-
     void timerCallback() override;
     void markPluginAsReady();
-
 
 private:
     void loadPlugin();
     void openPluginEditor();
-    void playChordProgression();
+    void startPlayback();
     void stopPlayback();
+    void togglePlayback();
+    void pushChordDataToEngine();
+    void handleModelChanged();
+    void refreshAnalysis();
+    void updateEditorVisibility();
 
+    std::unique_ptr<ReharmLookAndFeel> lookAndFeel;
     std::unique_ptr<AudioEngine> audioEngine;
 
-    juce::TextButton loadButton { "Load VST3" };
-    juce::TextButton pluginNameButton { "No Plugin Loaded" };
-    juce::TextButton playButton { "Play Progression" };
-    juce::TextButton stopButton { "Stop" };
-    juce::ComboBox keyComboBox;
-    juce::ComboBox scaleComboBox;
-    juce::TextEditor progressionDisplay;
+    reharm::ProgressionModel model;
+    DisplayState display;
+    bool isPlaying = false;
 
-    juce::Slider volumeSlider;
-    juce::Slider bpmSlider;
-    juce::TextEditor volumeLabel;
-    juce::TextEditor bpmLabel;
-
-    ChordProgressionGenerator generator;
+    HeaderBar headerBar;
+    SequencerView sequencerView;
+    AnalysisStrip analysisStrip;
+    ChordEditorPanel chordEditor;
+    TransportBar transportBar;
 
     std::unique_ptr<PluginEditorWindow> editorWindow;
+
+    static constexpr int kHeaderH = 56;
+    static constexpr int kAnalysisH = 40;
+    static constexpr int kEditorH = 224;
+    static constexpr int kTransportH = 64;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
