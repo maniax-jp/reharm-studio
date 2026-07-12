@@ -109,6 +109,92 @@ public:
     { return mPlayingSlotShared.load(std::memory_order_relaxed); }
 
 private:
+    /** Sound that matches every note for the fallback triangle synth. */
+    class TriangleSound : public juce::SynthesiserSound
+    {
+    public:
+        bool appliesToNote (int) override { return true; }
+        bool appliesToChannel (int) override { return true; }
+    };
+
+    /** Voice that generates a triangle wave shaped by an ADSR envelope. */
+    class TriangleVoice : public juce::SynthesiserVoice
+    {
+    public:
+        TriangleVoice()
+        {
+            juce::ADSR::Parameters params;
+            params.attack  = 0.005f;
+            params.decay   = 0.050f;
+            params.sustain = 0.8f;
+            params.release = 0.080f;
+            mAdsr.setParameters (params);
+        }
+
+        bool canPlaySound (juce::SynthesiserSound*) override { return true; }
+
+        void startNote (int midiNote, float velocity, juce::SynthesiserSound*, int) override
+        {
+            // velocity is already normalised to 0..1 by juce::Synthesiser.
+            mLevel = 0.2f * velocity;
+            mFrequency = juce::MidiMessage::getMidiNoteInHertz (midiNote);
+            mPhase = 0.0;
+            mAdsr.setSampleRate (getSampleRate());
+            mAdsr.reset();
+            mAdsr.noteOn();
+        }
+
+        void stopNote (float, bool allowTailOff) override
+        {
+            if (allowTailOff)
+            {
+                mAdsr.noteOff();
+            }
+            else
+            {
+                mAdsr.reset();
+                clearCurrentNote();
+            }
+        }
+
+        void pitchWheelMoved (int) override {}
+        void controllerMoved (int, int) override {}
+
+        void renderNextBlock (juce::AudioBuffer<float>& output, int startSample, int numSamples) override
+        {
+            if (! mAdsr.isActive())
+                return;
+
+            const double sr = getSampleRate();
+            if (sr <= 0.0)
+                return;
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float tri = 4.0f * std::abs ((float) mPhase - 0.5f) - 1.0f;
+                const float sample = tri * mAdsr.getNextSample() * mLevel;
+
+                for (int ch = 0; ch < output.getNumChannels(); ++ch)
+                    output.addSample (ch, startSample + i, sample);
+
+                mPhase += mFrequency / sr;
+                if (mPhase >= 1.0)
+                    mPhase -= 1.0;
+
+                if (! mAdsr.isActive())
+                {
+                    clearCurrentNote();
+                    break;
+                }
+            }
+        }
+
+    private:
+        double mFrequency = 440.0;
+        double mPhase = 0.0;
+        float mLevel = 0.2f;
+        juce::ADSR mAdsr;
+    };
     // Playhead must outlive the plugin (plugin holds a raw pointer via setPlayHead).
     HostPlayHead mPlayHead;
 
@@ -142,6 +228,9 @@ private:
     int mSoundingNotes[kMaxSoundingNotes] = {};
     int mNumSoundingNotes = 0;
     const void* mActiveChordDataPtr = nullptr; // last seen ChordData address
+
+    // Fallback triangle-wave synthesiser (used when no VST plugin is loaded).
+    juce::Synthesiser mFallbackSynth;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };
