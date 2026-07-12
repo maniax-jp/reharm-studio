@@ -1,0 +1,113 @@
+#pragma once
+
+#include <juce_core/juce_core.h>
+#include <vector>
+
+namespace reharm
+{
+
+/** All chord qualities supported by Reharm Studio. */
+enum class ChordQuality
+{
+    Major = 0,        // C      {0,4,7}
+    Minor,            // Cm     {0,3,7}
+    Dominant7,        // C7     {0,4,7,10}
+    Major7,           // CM7    {0,4,7,11}
+    Minor7,           // Cm7    {0,3,7,10}
+    MinorMajor7,      // CmM7   {0,3,7,11}
+    Add9,             // Cadd9  {0,4,7,14}
+    Sus2,             // Csus2  {0,2,7}
+    Sus4,             // Csus4  {0,5,7}
+    Augmented,        // Caug   {0,4,8}
+    Diminished,       // Cdim   {0,3,6}
+    Dominant9,        // C9     {0,4,7,10,14}
+    Sixth,            // C6     {0,4,7,9}
+    Add11,            // Cadd11 {0,4,7,17}
+    Add13,            // Cadd13 {0,4,7,21}
+    Major7Sus4,       // CM7sus4 {0,5,7,11}
+    Dominant7Sus4,    // C7sus4 {0,5,7,10}
+    Minor7Flat5,      // Cm7b5  {0,3,6,10}
+    Diminished7,      // Cdim7  {0,3,6,9}
+    Augmented7,       // Caug7  {0,4,8,10}
+    AugmentedMajor7,  // CaugM7 {0,4,8,11}
+    Blackadder,       // Cblk   {0,2,6,10} (root + aug triad a whole step above)
+    NumQualities
+};
+
+/** A chord: root pitch class, quality, and optional slash-chord bass. */
+struct Chord
+{
+    int rootPitchClass = 0;                       // 0 = C ... 11 = B
+    ChordQuality quality = ChordQuality::Major;
+    int bassPitchClass = -1;                      // -1 = none; >= 0 makes an on-chord (e.g. C/E)
+
+    bool hasBass() const noexcept { return bassPitchClass >= 0 && bassPitchClass != rootPitchClass; }
+
+    bool operator== (const Chord& other) const noexcept
+    {
+        return rootPitchClass == other.rootPitchClass
+            && quality == other.quality
+            && (hasBass() ? bassPitchClass : -1) == (other.hasBass() ? other.bassPitchClass : -1);
+    }
+    bool operator!= (const Chord& other) const noexcept { return ! (*this == other); }
+};
+
+/** The key context used for degree names and analysis. */
+struct KeyContext
+{
+    int tonicPitchClass = 0;   // 0 = C ... 11 = B
+    bool isMajor = true;
+};
+
+/** Static chord-theory utilities: intervals, naming, degree names. */
+class ChordModel
+{
+public:
+    /** Semitone intervals from the root for a quality (root = 0 always included). */
+    static const std::vector<int>& intervals (ChordQuality q);
+
+    /** Suffix appended to the root name, e.g. "m7", "M7sus4", "" for major. */
+    static juce::String qualitySuffix (ChordQuality q);
+
+    /** Human-readable name for UI quality selectors (same as suffix but "maj" for Major). */
+    static juce::String qualityDisplayName (ChordQuality q);
+
+    /** Pitch-class name, e.g. 1 -> "C#" (or "Db" when preferFlat). */
+    static juce::String pitchClassName (int pitchClass, bool preferFlat = false);
+
+    /** Full chord name, e.g. "F#m7b5", "C/E". */
+    static juce::String chordName (const Chord& c, bool preferFlat = false);
+
+    /** Degree name relative to the key, e.g. "IVM7", "bVII7", on-chord: "I/III".
+        Roman numeral is always uppercase; minor quality is expressed via suffix ("IIm7"). */
+    static juce::String degreeName (const Chord& c, const KeyContext& key);
+
+    /** Roman numeral (with leading b/#) for a pitch class relative to the tonic, e.g. "bVI". */
+    static juce::String degreeRoman (int pitchClass, const KeyContext& key);
+
+    /** Chord tones as pitch classes 0..11 (bass excluded). */
+    static std::vector<int> chordTonePitchClasses (const Chord& c);
+
+    /** True if every chord tone fits the key's diatonic scale
+        (major scale, or natural minor for minor keys). */
+    static bool isDiatonic (const Chord& c, const KeyContext& key);
+
+    /** The 7 diatonic pitch classes of the key. */
+    static std::vector<int> scalePitchClasses (const KeyContext& key);
+};
+
+/** Converts chords to concrete MIDI notes in close or open voicing. */
+class Voicing
+{
+public:
+    enum class Style { Close, Open };
+
+    /** Returns MIDI notes (ascending) for the chord.
+        Close: root position stacked from the root near octaveBase (default C4 = 60);
+               explicit bass (on-chord) is added below the root.
+        Open:  drop-2 of the close voicing (second-highest note dropped one octave),
+               plus a bass note one octave below the root (or the explicit bass). */
+    static std::vector<int> midiNotes (const Chord& c, Style style, int octaveBase = 60);
+};
+
+} // namespace reharm

@@ -4,27 +4,47 @@
 
 ## 機能
 
-- キー（C, C#, D, … B）とスケール（Major / Minor）の選択
-- コード進行の自動生成（Major: `I - vi - IV - V`、Minor: `i - VI - iv - v`）
-- ローマ数字コード記号から MIDI ノートへの変換（三和音）
+### ステップシーケンサー (Studio Noir デザイン)
+
+- 最大 8 小節のコード進行を表示・編集・再生（ループ）
+- 1 小節 = 基本 1 コード。小節ごとに **1 / 2 / 4 分割** を切替可能（空スロットは休符）
+- セルをクリックしてコードエディタで編集: ルート 12 音 / オンコード（ベース指定）/
+  22 種のコード品質（maj, m, 7, M7, m7, mM7, add9, sus2, sus4, aug, dim, 9, 6,
+  add11, add13, M7sus4, 7sus4, m7b5, dim7, aug7, augM7, blk）
+- **ディグリーネーム / コードネーム** の主表示切替
+- **クローズ / オープンボイシング** の切替（再生中も即反映）
+- 再生中のセルをリアルタイムハイライト
+
+### 代表進行プリセット
+
+王道進行・カノン進行・ポップパンク進行・小室進行・丸サ進行・枯葉進行を
+現在のキーに移調して一括適用。
+
+### ハーモニー解析 (HarmonyAnalyzer)
+
+- パターン検出: ツーファイブワン・強進行・限定進行・クリシェ・代表進行との全体一致
+- ノンダイアトニックコードの技法分類をセル上にバッジ表示:
+  セカンダリードミナント / ドッペルドミナント / 裏コード(トライトーン代理) /
+  サブドミナントマイナー / モーダルインターチェンジ（借用先スケール名を表示）/
+  パッシングディミニッシュ / ピカルディ終止 / リレイテッドツーマイナー
+- コードの置き換え候補（代理コード・裏コード・ドミナント化）をワンクリックで適用
+
+### VST3 ホスト
+
 - VST3 インストゥルメントプラグインのホスト
-  - プラグイン名の表示
-  - プラグイン GUI エディタの別ウィンドウ表示
+  - プラグイン名の表示・GUI エディタの別ウィンドウ表示
   - ホスト側プレイヘッド（BPM / 拍位置 / 再生状態 / PPQ位置 / サンプルカウント）の提供
-  - スレッドセーフなプラグイン読み込み（読み込み中はロード中フラグでオーディオコールバックをガードし、オーディオデバイスを閉じずに読み込み）
-- 生成した進行の MIDI 再生（各コード 4 拍、ループ再生）
-- 再生の停止
+  - スレッドセーフなプラグイン読み込み（オーディオデバイスを閉じずに読み込み）
 - 音量（Volume）とテンポ（BPM 40–240）の調整
 
 ## 使用方法
 
-1. アプリケーションを起動する
+1. アプリケーションを起動する（起動時は王道進行がセットされる）
 2. **Load VST3** ボタンで VST3 プラグイン（`.vst3`）を選択する
 3. プラグイン名ボタンをクリックすると、プラグインの GUI エディタが開く
-4. キーとスケールを選択する（進行テキストが自動更新される）
-5. 必要に応じて Volume / BPM を調整する
-6. **Play Progression** で再生する（進行はループする）
-7. **Stop** で再生を止める
+4. ヘッダーでキー / スケール / プリセット進行を選択する
+5. セルをクリックしてコードを編集する（下部エディタパネル）
+6. 丸い再生ボタンで再生 / 停止（進行はループする）
 
 ## トラブルシューティング
 
@@ -52,16 +72,24 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 .
 ├── Source/                          # 本体アプリケーションのソースコード
 │   ├── Main.cpp                     # エントリポイント
-│   ├── MainComponent.*              # UI・プラグイン読み込み・再生制御
-│   ├── AudioEngine.*                # リアルタイム音声処理・MIDI スケジューリング・VST3 ホスト・HostPlayHead
-│   ├── ChordProgressionGenerator.*  # コード進行生成
-│   └── ChordTheory.*                # コード記号 → MIDI ノート変換
+│   ├── MainComponent.*              # 画面全体の統合・プラグイン読み込み・再生制御
+│   ├── AudioEngine.*                # リアルタイム音声処理・可変長スロットのMIDIスケジューリング・VST3 ホスト・HostPlayHead
+│   ├── ChordModel.*                 # コード理論コア（22品質・命名・ディグリー・ボイシング）
+│   ├── ProgressionModel.*           # 8小節×1/2/4分割のシーケンサーモデル・代表進行プリセット
+│   ├── HarmonyAnalyzer.*            # パターン検出・ノンダイアトニック分類・置換候補
+│   ├── Theme.*                      # Studio Noir デザインシステム（LookAndFeel・パレット）
+│   ├── HeaderBar.* / SequencerView.* / AnalysisStrip.* / ChordEditorPanel.* / TransportBar.*  # UIコンポーネント
+│   ├── Localization.h               # UI日本語表示（UTF-8安全な変換層）
+│   ├── ChordProgressionGenerator.*  # (旧) コード進行生成
+│   └── ChordTheory.*                # (旧) コード記号 → MIDI ノート変換
 ├── Tests/                           # 単体テスト
 │   ├── TestRunner.cpp               # テストランナー
-│   ├── AudioEngineTest.cpp          # AudioEngine の動作テスト
-│   ├── ChordProgressionTest.cpp     # コード進行生成テスト
-│   ├── ChordProgressionGeneratorTest.cpp  # 進行ジェネレータテスト
-│   ├── ChordTheoryTest.cpp          # コード理論変換テスト
+│   ├── AudioEngineTest.cpp          # AudioEngine の動作テスト（可変長スロット含む）
+│   ├── ChordModelTest.cpp           # コード理論コア・ボイシングのテスト
+│   ├── ProgressionModelTest.cpp     # シーケンサーモデル・プリセットのテスト
+│   ├── HarmonyAnalyzerTest.cpp      # ハーモニー解析のテスト
+│   ├── ChordProgressionTest.cpp     # (旧) コード進行生成テスト
+│   ├── ChordTheoryTest.cpp          # (旧) コード理論変換テスト
 │   └── TimingTest.cpp               # タイミング計算テスト
 ├── Experiments/                     # 実験的なプログラム（仕様確認・動作検証用）
 │   ├── PluginLoadTest.cpp           # VST3 プラグインのチャンネル構成検証（VPS Avenger 用）

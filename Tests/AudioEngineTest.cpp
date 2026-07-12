@@ -54,6 +54,8 @@ public:
             auto chordData = std::make_shared<ChordData>();
             chordData->totalChords = 1;
             chordData->notes.push_back ({60, 64, 67});
+            chordData->beats.push_back (4.0);
+            chordData->totalBeats = 4.0;
             engine.setChordData (chordData);
             engine.startPlayback();
 
@@ -77,6 +79,9 @@ public:
             chordData->totalChords = 2;
             chordData->notes.push_back ({60, 64, 67});
             chordData->notes.push_back ({67, 71, 74});
+            chordData->beats.push_back (4.0);
+            chordData->beats.push_back (4.0);
+            chordData->totalBeats = 8.0;
             engine.setChordData (chordData);
             engine.startPlayback();
 
@@ -108,6 +113,8 @@ public:
             auto chordData = std::make_shared<ChordData>();
             chordData->totalChords = 1;
             chordData->notes.push_back ({60, 64, 67});
+            chordData->beats.push_back (4.0);
+            chordData->totalBeats = 4.0;
             engine.setChordData (chordData);
             engine.startPlayback();
 
@@ -132,6 +139,87 @@ public:
 
             engine.setPluginInstance (std::move (plugin));
             expect (engine.getPluginInstance() == pluginPtr, "getPluginInstance should return the loaded plugin");
+        }
+
+        // ---- New tests for variable-length chord slots ----
+
+        beginTest ("NewConstructorVariableBeats");
+        {
+            auto chordData = std::make_shared<ChordData>(
+                std::vector<std::vector<int>> {{60, 64, 67}, {67, 71, 74}, {65, 69, 72}},
+                std::vector<double> {4.0, 2.0, 2.0}
+            );
+            expectEquals (chordData->totalBeats, 8.0, "Total beats should be 8.0");
+            expectEquals (chordData->totalChords, 3, "Should have 3 chords");
+            expectEquals ((int) chordData->beats.size(), 3, "Should have 3 beat entries");
+            expectEquals (chordData->beats[0], 4.0, "First slot should be 4 beats");
+            expectEquals (chordData->beats[1], 2.0, "Second slot should be 2 beats");
+            expectEquals (chordData->beats[2], 2.0, "Third slot should be 2 beats");
+        }
+
+        beginTest ("OldConstructorSetsDefaultBeats");
+        {
+            juce::Array<juce::Array<int>> juceNotes;
+            juceNotes.add ({60, 64, 67});
+            juceNotes.add ({67, 71, 74});
+
+            auto chordData = std::make_shared<ChordData>(juceNotes);
+            expectEquals (chordData->totalChords, 2, "Should have 2 chords");
+            expectEquals ((int) chordData->beats.size(), 2, "Should have 2 beat entries");
+            expectEquals (chordData->beats[0], 4.0, "First slot default should be 4.0");
+            expectEquals (chordData->beats[1], 4.0, "Second slot default should be 4.0");
+            expectEquals (chordData->totalBeats, 8.0, "Total beats should be 8.0");
+        }
+
+        beginTest ("EmptySlotDoesNotCrash");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+            engine.setBpm (120);
+
+            // Progression with an empty (rest) slot in the middle.
+            auto chordData = std::make_shared<ChordData>(
+                std::vector<std::vector<int>> {{60, 64, 67}, {}, {67, 71, 74}},
+                std::vector<double> {4.0, 2.0, 2.0}
+            );
+            engine.setChordData (chordData);
+            engine.startPlayback();
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+
+            // Process several blocks; should not crash even with empty slot.
+            for (int i = 0; i < 10; ++i)
+            {
+                midi.clear();
+                engine.processBlock (buffer, midi);
+            }
+
+            expect (true, "Processing with empty slot should not crash");
+        }
+
+        beginTest ("GetCurrentPlayingSlot");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+            engine.setBpm (120);
+
+            // Stopped state should return -1.
+            expectEquals (engine.getCurrentPlayingSlot(), -1, "Stopped should return -1");
+
+            auto chordData = std::make_shared<ChordData>();
+            chordData->totalChords = 1;
+            chordData->notes.push_back ({60, 64, 67});
+            chordData->beats.push_back (4.0);
+            chordData->totalBeats = 4.0;
+            engine.setChordData (chordData);
+            engine.startPlayback();
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+            engine.processBlock (buffer, midi);
+
+            expect (engine.getCurrentPlayingSlot() >= 0, "Playing slot should be >= 0 after playback starts");
         }
     }
 };

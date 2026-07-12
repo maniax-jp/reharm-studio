@@ -26,78 +26,102 @@ typedef struct AudioObjectPropertyAddress {
 } AudioObjectPropertyAddress;
 typedef AudioObjectID AudioDeviceID;
 
+//==============================================================================
 MainComponent::MainComponent()
 {
-    setSize (800, 600);
+    setSize (1140, 760);
+
+    lookAndFeel = std::make_unique<ReharmLookAndFeel>();
+    setLookAndFeel (lookAndFeel.get());
 
     audioEngine = std::make_unique<AudioEngine>();
 
-    addAndMakeVisible (loadButton);
-    loadButton.addListener (this);
+    // --- Child components ---
+    addAndMakeVisible (headerBar);
+    addAndMakeVisible (sequencerView);
+    addAndMakeVisible (analysisStrip);
+    addAndMakeVisible (chordEditor);
+    addAndMakeVisible (transportBar);
 
-    addAndMakeVisible (pluginNameButton);
-    pluginNameButton.addListener (this);
+    sequencerView.setModel (&model);
+    sequencerView.setDisplayState (&display);
+    chordEditor.setModel (&model);
+    chordEditor.setDisplayState (&display);
 
-    addAndMakeVisible (playButton);
-    playButton.addListener (this);
+    headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
+    headerBar.setShowDegree (display.showDegree);
+    headerBar.setVoicingClose (display.voicingStyle == reharm::Voicing::Style::Close);
 
-    addAndMakeVisible (stopButton);
-    stopButton.addListener (this);
+    headerBar.onKeyChanged = [this] (int tonic, bool isMajor)
+    {
+        model.setKey ({ tonic, isMajor });
+    };
 
-    addAndMakeVisible (keyComboBox);
-    keyComboBox.addListener (this);
-    keyComboBox.addItem ("C", 1);
-    keyComboBox.addItem ("C#", 2);
-    keyComboBox.addItem ("D", 3);
-    keyComboBox.addItem ("D#", 4);
-    keyComboBox.addItem ("E", 5);
-    keyComboBox.addItem ("F", 6);
-    keyComboBox.addItem ("F#", 7);
-    keyComboBox.addItem ("G", 8);
-    keyComboBox.addItem ("G#", 9);
-    keyComboBox.addItem ("A", 10);
-    keyComboBox.addItem ("A#", 11);
-    keyComboBox.addItem ("B", 12);
-    keyComboBox.setSelectedId (1);
+    headerBar.onPresetSelected = [this] (const reharm::PresetProgression& preset)
+    {
+        reharm::ProgressionPresets::applyToModel (preset, model);
+        display.clearSelection();
+        updateEditorVisibility();
+    };
 
-    addAndMakeVisible (scaleComboBox);
-    scaleComboBox.addListener (this);
-    scaleComboBox.addItem ("Major", 1);
-    scaleComboBox.addItem ("Minor", 2);
-    scaleComboBox.setSelectedId (1);
+    headerBar.onShowDegreeChanged = [this] (bool showDegree)
+    {
+        display.showDegree = showDegree;
+        sequencerView.repaint();
+    };
 
-    addAndMakeVisible (progressionDisplay);
-    progressionDisplay.setMultiLine (true);
-    progressionDisplay.setReadOnly (true);
+    headerBar.onVoicingChanged = [this] (bool close)
+    {
+        display.voicingStyle = close ? reharm::Voicing::Style::Close
+                                     : reharm::Voicing::Style::Open;
+        if (isPlaying)
+            pushChordDataToEngine();
+    };
 
-    // Volume slider
-    addAndMakeVisible (volumeSlider);
-    volumeSlider.setRange (0.0, 1.0, 0.01);
-    volumeSlider.setValue (0.8);
-    volumeSlider.addListener (this);
+    sequencerView.onCellSelected = [this] (int bar, int slot)
+    {
+        display.selectedBar = bar;
+        display.selectedSlot = slot;
+        chordEditor.refreshFromSelection();
+        updateEditorVisibility();
+        sequencerView.repaint();
+    };
 
-    addAndMakeVisible (volumeLabel);
-    volumeLabel.setText ("Volume: 80%", false);
-    volumeLabel.setReadOnly (true);
+    transportBar.onPlayStopClicked = [this] { togglePlayback(); };
+    transportBar.onBpmChanged = [this] (int bpm)
+    {
+        audioEngine->setBpm (bpm);
+    };
+    transportBar.onVolumeChanged = [this] (float vol)
+    {
+        audioEngine->setVolume (vol);
+    };
+    transportBar.onLoadPlugin = [this] { loadPlugin(); };
+    transportBar.onOpenPluginEditor = [this] { openPluginEditor(); };
 
-    // BPM slider
-    addAndMakeVisible (bpmSlider);
-    bpmSlider.setRange (40.0, 240.0, 1.0);
-    bpmSlider.setValue (120.0);
-    bpmSlider.addListener (this);
+    model.onChanged = [this] { handleModelChanged(); };
 
-    addAndMakeVisible (bpmLabel);
-    bpmLabel.setText ("BPM: 120", false);
-    bpmLabel.setReadOnly (true);
+    // Seed a simple default progression so the UI is not empty on launch
+    {
+        const auto& presets = reharm::ProgressionPresets::all();
+        if (! presets.empty())
+            reharm::ProgressionPresets::applyToModel (presets.front(), model);
+    }
+
+    refreshAnalysis();
+    updateEditorVisibility();
 
     setAudioChannels (0, 2);
+    startTimer (50);
 }
 
 MainComponent::~MainComponent()
 {
+    stopTimer();
     stopPlayback();
     editorWindow.reset();
     shutdownAudio();
+    setLookAndFeel (nullptr);
 }
 
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
@@ -109,12 +133,6 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
 {
     juce::MidiBuffer midiBuffer;
     audioEngine->processBlock (*bufferToFill.buffer, midiBuffer);
-
-    // Since we are an AudioAppComponent, the buffer passed to us is the output buffer.
-    // AudioEngine::processBlock handles filling the buffer and processing MIDI.
-    // However, we need to ensure that the MIDI messages generated in AudioEngine
-    // are actually handled if this were a plugin. In a standalone app, the
-    // AudioEngine already handled the plugin processBlock internally.
 }
 
 void MainComponent::releaseResources()
@@ -124,88 +142,119 @@ void MainComponent::releaseResources()
 
 void MainComponent::paint (juce::Graphics& g)
 {
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+    g.fillAll (theme::bg);
 }
 
 void MainComponent::resized()
 {
-    auto area = getLocalBounds().reduced (10);
+    auto area = getLocalBounds();
 
-    auto topArea = area.removeFromTop (40);
-    loadButton.setBounds (topArea.removeFromLeft (100));
-    pluginNameButton.setBounds (topArea.removeFromLeft (200));
-    playButton.setBounds (topArea.removeFromLeft (150));
-    stopButton.setBounds (topArea.removeFromLeft (100));
+    headerBar.setBounds (area.removeFromTop (kHeaderH));
+    transportBar.setBounds (area.removeFromBottom (kTransportH));
 
-    auto keyArea = area.removeFromTop (40);
-    keyComboBox.setBounds (keyArea.removeFromLeft (100));
-    scaleComboBox.setBounds (keyArea.removeFromLeft (100));
+    const int editorH = display.hasSelection() ? kEditorH : 0;
+    if (editorH > 0)
+        chordEditor.setBounds (area.removeFromBottom (editorH));
+    else
+        chordEditor.setBounds ({});
 
-    auto controlArea = area.removeFromTop (60);
-    volumeSlider.setBounds (controlArea.removeFromLeft (200));
-    volumeLabel.setBounds (controlArea.removeFromLeft (150));
-    bpmSlider.setBounds (controlArea.removeFromLeft (200));
-    bpmLabel.setBounds (controlArea.removeFromLeft (100));
-
-    progressionDisplay.setBounds (area);
+    analysisStrip.setBounds (area.removeFromBottom (kAnalysisH));
+    sequencerView.setBounds (area);
 }
 
-void MainComponent::changeListenerCallback (juce::ChangeBroadcaster* source)
+void MainComponent::updateEditorVisibility()
 {
+    chordEditor.setVisible (display.hasSelection());
+    resized();
 }
 
-void MainComponent::buttonClicked (juce::Button* button)
+void MainComponent::handleModelChanged()
 {
-    if (button == &loadButton)
+    sequencerView.repaint();
+    refreshAnalysis();
+    chordEditor.refreshFromSelection();
+
+    if (isPlaying)
+        pushChordDataToEngine();
+}
+
+void MainComponent::refreshAnalysis()
+{
+    const auto analyses = reharm::HarmonyAnalyzer::analyzeAll (model);
+    sequencerView.setAnalyses (analyses);
+
+    const auto patterns = reharm::HarmonyAnalyzer::detectPatterns (model);
+    analysisStrip.setPatterns (patterns, model);
+}
+
+void MainComponent::pushChordDataToEngine()
+{
+    const auto flat = model.flatten();
+    std::vector<std::vector<int>> notes;
+    std::vector<double> beats;
+    notes.reserve (flat.size());
+    beats.reserve (flat.size());
+
+    for (const auto& fc : flat)
     {
-        loadPlugin();
+        beats.push_back (fc.beats);
+        if (fc.chord.has_value())
+            notes.push_back (reharm::Voicing::midiNotes (*fc.chord, display.voicingStyle));
+        else
+            notes.emplace_back(); // rest: empty note list
     }
-    else if (button == &pluginNameButton)
-    {
-        openPluginEditor();
-    }
-    else if (button == &playButton)
-    {
-        playChordProgression();
-    }
-    else if (button == &stopButton)
-    {
+
+    auto data = std::make_shared<ChordData> (std::move (notes), std::move (beats));
+    audioEngine->setChordData (data);
+}
+
+void MainComponent::startPlayback()
+{
+    pushChordDataToEngine();
+    audioEngine->startPlayback();
+    isPlaying = true;
+    transportBar.setPlaying (true);
+}
+
+void MainComponent::stopPlayback()
+{
+    audioEngine->stopPlayback();
+    isPlaying = false;
+    transportBar.setPlaying (false);
+    sequencerView.setPlayingFlatIndex (-1);
+}
+
+void MainComponent::togglePlayback()
+{
+    if (isPlaying)
         stopPlayback();
-    }
-}
-
-void MainComponent::comboBoxChanged (juce::ComboBox* comboBox)
-{
-    if (comboBox == &keyComboBox || comboBox == &scaleComboBox)
-    {
-        auto progression = generator.generateProgression (keyComboBox.getSelectedId() - 1,
-                                                          scaleComboBox.getSelectedId() == 1 ? "Major" : "Minor");
-        progressionDisplay.setText (progression);
-    }
-}
-
-void MainComponent::sliderValueChanged (juce::Slider* slider)
-{
-    if (slider == &volumeSlider)
-    {
-        float vol = static_cast<float> (volumeSlider.getValue());
-        audioEngine->setVolume (vol);
-        volumeLabel.setText ("Volume: " + juce::String (static_cast<int> (vol * 100)) + "%", false);
-    }
-    else if (slider == &bpmSlider)
-    {
-        int newBpm = static_cast<int> (bpmSlider.getValue());
-        audioEngine->setBpm (newBpm);
-        bpmLabel.setText ("BPM: " + juce::String (newBpm), false);
-    }
+    else
+        startPlayback();
 }
 
 void MainComponent::timerCallback()
 {
+    // Preserve original plugin-ready polling behaviour
     if (audioEngine->getPluginInstance() != nullptr)
     {
-        audioEngine->setPluginReady(true);
-        stopTimer();
+        // Mark ready once instance exists (original stopped the timer; we keep it
+        // running for playhead polling and only set ready when needed).
+        static bool marked = false;
+        if (! marked)
+        {
+            audioEngine->setPluginReady (true);
+            marked = true;
+        }
+    }
+
+    if (isPlaying)
+    {
+        const int slot = audioEngine->getCurrentPlayingSlot();
+        sequencerView.setPlayingFlatIndex (slot);
+    }
+    else
+    {
+        sequencerView.setPlayingFlatIndex (-1);
     }
 }
 
@@ -274,7 +323,7 @@ void MainComponent::loadPlugin()
                                   format.findAllTypesForFile (descriptions, file.getFullPathName());
                                   debugLog ("loadPlugin: scan complete, descriptions count: " + juce::String (descriptions.size()));
 
-                                  if (!descriptions.isEmpty())
+                                  if (! descriptions.isEmpty())
                                   {
                                       auto setup = deviceManager.getAudioDeviceSetup();
                                       double sampleRate = setup.sampleRate;
@@ -306,8 +355,7 @@ void MainComponent::loadPlugin()
                                           audioEngine->loadPluginInstance (std::move (pluginInstance), sampleRate, blockSize);
                                           debugLog ("Plugin loaded successfully");
 
-                                          // Set button text AFTER loading to avoid UI thread contention
-                                          pluginNameButton.setButtonText (pluginName);
+                                          transportBar.setPluginName (pluginName);
                                           debugLog ("Plugin loaded UI update: " + pluginName);
                                       }
                                       else
@@ -321,53 +369,4 @@ void MainComponent::loadPlugin()
                                   }
                               }
                           });
-}
-
-void MainComponent::stopPlayback()
-{
-    audioEngine->stopPlayback();
-}
-
-void MainComponent::playChordProgression()
-{
-    // We need the plugin to be loaded first
-    // AudioEngine doesn't expose the pluginInstance directly, so we check if it can play
-    // In a real app, we'd check if pluginInstance is null in AudioEngine.
-
-    auto progression = generator.generateProgression (keyComboBox.getSelectedId() - 1,
-                                                      scaleComboBox.getSelectedId() == 1 ? "Major" : "Minor");
-
-    // Parse progression and generate chord notes
-    juce::Array<juce::Array<int>> juceNotes;
-    juce::StringArray chords;
-    juce::String remaining = progression;
-    while (remaining.isNotEmpty())
-    {
-        int nextHyphen = remaining.indexOf (" - ");
-        if (nextHyphen >= 0)
-        {
-            chords.add (remaining.substring (0, nextHyphen).trim());
-            remaining = remaining.substring (nextHyphen + 3);
-        }
-        else
-        {
-            chords.add (remaining.trim());
-            remaining = "";
-        }
-    }
-
-    int root = keyComboBox.getSelectedId() - 1;
-    bool isMajor = scaleComboBox.getSelectedId() == 1;
-
-    for (auto& chord : chords)
-    {
-        auto notes = ChordTheory::getChordNotes (chord, root, isMajor);
-        juce::Array<int> juceNotesArray;
-        for (int n : notes) juceNotesArray.add (n);
-        juceNotes.add (juceNotesArray);
-    }
-
-    auto chordData = std::make_shared<ChordData> (juceNotes);
-    audioEngine->setChordData (chordData);
-    audioEngine->startPlayback();
 }
