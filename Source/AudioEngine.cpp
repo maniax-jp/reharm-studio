@@ -56,10 +56,6 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     // Capture a local reference to the current chord data
     auto chordData = std::atomic_load(&mCurrentChordData);
 
-    // Guard: chord data may have been swapped for a shorter progression while index was large.
-    if (mCurrentChordIndex >= chordData->totalChords)
-        mCurrentChordIndex = 0;
-
     // Block-start beat position for the playhead (capture before advancing).
     const double blockStartPpq = mCurrentBeatPosition;
 
@@ -78,29 +74,121 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
         if (totalBeats > 0)
         {
             // Build cumulative beat positions for variable-length slots.
-            // cumBeats[i] = start beat of slot i, cumBeats[n] = totalBeats.
             std::vector<double> cumBeats;
             cumBeats.reserve(static_cast<size_t>(chordData->totalChords) + 1);
             cumBeats.push_back(0.0);
             for (int i = 0; i < chordData->totalChords; ++i)
                 cumBeats.push_back(cumBeats.back() + chordData->beats[i]);
 
-            // 1. Handle the very first Note On (only on the initial block after startPlayback).
-            if (mFirstBlock && startBeat == 0.0 && mCurrentChordIndex < chordData->totalChords)
+            // Detect chord data swap: send note-offs for old sounding notes.
+            if (chordData.get() != mActiveChordDataPtr && mNumSoundingNotes > 0)
+            {
+                for (int i = 0; i < mNumSoundingNotes; ++i)
+                    midiMessages.addEvent(juce::MidiMessage::noteOff(1, mSoundingNotes[i]), 0);
+                mNumSoundingNotes = 0;
+
+                // Normalize beat position to new data range.
+                mCurrentBeatPosition = fmod(mCurrentBeatPosition, totalBeats);
+                startBeat = mCurrentBeatPosition - blockBeats;
+                if (startBeat < 0) startBeat = 0;
+                endBeat = mCurrentBeatPosition;
+
+                // Find current slot from cumBeats.
+                mCurrentChordIndex = 0;
+                for (int i = 0; i < chordData->totalChords; ++i)
+                {
+                    if (mCurrentBeatPosition < cumBeats[i + 1])
+                    {
+                        mCurrentChordIndex = i;
+                        break;
+                    }
+                    mCurrentChordIndex = i;
+                }
+
+                // Send note-on for the current slot of new data.
+                if (!chordData->notes[mCurrentChordIndex].empty())
+                {
+                    for (int n = 0; n < static_cast<int>(chordData->notes[mCurrentChordIndex].size())
+                         && mNumSoundingNotes < kMaxSoundingNotes; ++n)
+                    {
+                        const int note = chordData->notes[mCurrentChordIndex][n];
+                        bool dup = false;
+                        for (int d = 0; d < mNumSoundingNotes; ++d)
+                            if (mSoundingNotes[d] == note) { dup = true; break; }
+                        if (!dup)
+                        {
+                            mSoundingNotes[mNumSoundingNotes++] = note;
+                            midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), 0);
+                        }
+                    }
+                }
+                mPlayingSlotShared.store(mCurrentChordIndex, std::memory_order_relaxed);
+                mActiveChordDataPtr = chordData.get();
+                mFirstBlock = false;
+            }
+
+            // Guard: index out of range after swap or other edge case.
+            if (mCurrentChordIndex >= chordData->totalChords)
+            {
+                if (mNumSoundingNotes > 0)
+                {
+                    for (int i = 0; i < mNumSoundingNotes; ++i)
+                        midiMessages.addEvent(juce::MidiMessage::noteOff(1, mSoundingNotes[i]), 0);
+                    mNumSoundingNotes = 0;
+                }
+                mCurrentChordIndex = 0;
+                mCurrentBeatPosition = 0.0;
+                mFirstBlock = true;
+            }
+
+            // Helper: send note-on for a slot and track in mSoundingNotes.
+            auto sendSlotNoteOn = [&]()
+            {
+                if (mCurrentChordIndex < chordData->totalChords
+                    && !chordData->notes[mCurrentChordIndex].empty())
+                {
+                    for (int n = 0; n < static_cast<int>(chordData->notes[mCurrentChordIndex].size())
+                         && mNumSoundingNotes < kMaxSoundingNotes; ++n)
+                    {
+                        const int note = chordData->notes[mCurrentChordIndex][n];
+                        bool dup = false;
+                        for (int d = 0; d < mNumSoundingNotes; ++d)
+                            if (mSoundingNotes[d] == note) { dup = true; break; }
+                        if (!dup)
+                            mSoundingNotes[mNumSoundingNotes++] = note;
+                    }
+                }
+                mPlayingSlotShared.store(mCurrentChordIndex, std::memory_order_relaxed);
+            };
+
+            // 1. Handle the very first Note On.
+            if (mFirstBlock && mCurrentChordIndex < chordData->totalChords)
             {
                 if (!chordData->notes[mCurrentChordIndex].empty())
                 {
-                    for (int note : chordData->notes[mCurrentChordIndex])
-                        midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), 0);
+                    for (int n = 0; n < static_cast<int>(chordData->notes[mCurrentChordIndex].size())
+                         && mNumSoundingNotes < kMaxSoundingNotes; ++n)
+                    {
+                        const int note = chordData->notes[mCurrentChordIndex][n];
+                        bool dup = false;
+                        for (int d = 0; d < mNumSoundingNotes; ++d)
+                            if (mSoundingNotes[d] == note) { dup = true; break; }
+                        if (!dup)
+                        {
+                            mSoundingNotes[mNumSoundingNotes++] = note;
+                            midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), 0);
+                        }
+                    }
                 }
                 mPlayingSlotShared.store(mCurrentChordIndex, std::memory_order_relaxed);
                 mFirstBlock = false;
+                if (mActiveChordDataPtr == nullptr)
+                    mActiveChordDataPtr = chordData.get();
             }
 
             // 2. Handle transitions (including loop).
             while (true)
             {
-                // Next transition is at the end of the current slot.
                 double nextTransitionBeat = cumBeats[mCurrentChordIndex + 1];
 
                 if (nextTransitionBeat > endBeat)
@@ -110,16 +198,16 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
                 {
                     int relativeOffset = static_cast<int>((nextTransitionBeat - startBeat) / beatsPerSample);
 
-                    // Send NoteOff for current slot.
-                    for (int note : chordData->notes[mCurrentChordIndex])
-                        midiMessages.addEvent(juce::MidiMessage::noteOff(1, note), relativeOffset);
+                    // Send NoteOff for all currently sounding notes.
+                    for (int i = 0; i < mNumSoundingNotes; ++i)
+                        midiMessages.addEvent(juce::MidiMessage::noteOff(1, mSoundingNotes[i]), relativeOffset);
+                    mNumSoundingNotes = 0;
 
                     // Advance to next slot.
                     mCurrentChordIndex++;
                     if (mCurrentChordIndex >= chordData->totalChords)
                     {
                         mCurrentChordIndex = 0;
-                        // Normalize start/end for the next loop iteration.
                         startBeat -= totalBeats;
                         endBeat -= totalBeats;
                     }
@@ -127,14 +215,25 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
                     // Send NoteOn for the new slot if not empty.
                     if (!chordData->notes[mCurrentChordIndex].empty())
                     {
-                        for (int note : chordData->notes[mCurrentChordIndex])
-                            midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), relativeOffset);
+                        for (int n = 0; n < static_cast<int>(chordData->notes[mCurrentChordIndex].size())
+                             && mNumSoundingNotes < kMaxSoundingNotes; ++n)
+                        {
+                            const int note = chordData->notes[mCurrentChordIndex][n];
+                            bool dup = false;
+                            for (int d = 0; d < mNumSoundingNotes; ++d)
+                                if (mSoundingNotes[d] == note) { dup = true; break; }
+                            if (!dup)
+                            {
+                                mSoundingNotes[mNumSoundingNotes++] = note;
+                                midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), relativeOffset);
+                            }
+                        }
                     }
                     mPlayingSlotShared.store(mCurrentChordIndex, std::memory_order_relaxed);
                 }
                 else
                 {
-                    // Transition occurred before this block; just advance index.
+                    // Transition before this block; advance index without MIDI events.
                     mCurrentChordIndex++;
                     if (mCurrentChordIndex >= chordData->totalChords)
                     {
@@ -153,18 +252,22 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     }
     else if (mStopRequested.load())
     {
-        if (mCurrentChordIndex < chordData->totalChords)
-        {
-            for (int note : chordData->notes[mCurrentChordIndex])
-                midiMessages.addEvent(juce::MidiMessage::noteOff(1, note), 0);
-        }
+        // Send note-off for all currently sounding notes.
+        for (int i = 0; i < mNumSoundingNotes; ++i)
+            midiMessages.addEvent(juce::MidiMessage::noteOff(1, mSoundingNotes[i]), 0);
+        mNumSoundingNotes = 0;
+
+        // Safety: send all-notes-off as a fallback.
+        midiMessages.addEvent(juce::MidiMessage::allNotesOff(1), 0);
+
         std::atomic_store(&mStopRequested, false);
         mCurrentChordIndex = 0;
         mCurrentBeatPosition = 0.0;
         mPlayingSlotShared.store(-1, std::memory_order_relaxed);
+        mActiveChordDataPtr = nullptr;
     }
 
-    // Keep host playhead in sync before plugin processBlock (plugins read tempo/position here).
+    // Keep host playhead in sync before plugin processBlock.
     mPlayHead.sampleRate = mSampleRate;
     mPlayHead.bpm = (double) mBpm.load();
     mPlayHead.playing = mIsPlaying.load();
@@ -289,6 +392,8 @@ void AudioEngine::startPlayback()
     mPlayHead.ppq = 0.0;
     mFirstBlock = true;
     mPlayingSlotShared.store(0, std::memory_order_relaxed);
+    mNumSoundingNotes = 0;
+    mActiveChordDataPtr = std::atomic_load(&mCurrentChordData).get();
     std::atomic_store(&mIsPlaying, true);
 }
 

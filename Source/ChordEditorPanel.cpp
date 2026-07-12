@@ -41,6 +41,10 @@ void ChordEditorPanel::applyChord (const reharm::Chord& c)
         return;
     model->setChord (display->selectedBar, display->selectedSlot, c);
     rebuildSubChips();
+    // Re-layout the freshly rebuilt chips: rebuildSubChips() creates them with
+    // empty bounds, and without this call paint() would skip drawing them until
+    // the next external resized() (e.g. reselecting the cell).
+    resized();
     repaint();
 }
 
@@ -50,8 +54,10 @@ void ChordEditorPanel::clearSlot()
         return;
     model->setChord (display->selectedBar, display->selectedSlot, std::nullopt);
     rebuildSubChips();
+    resized();
     repaint();
 }
+
 
 void ChordEditorPanel::rebuildSubChips()
 {
@@ -122,7 +128,10 @@ void ChordEditorPanel::paint (juce::Graphics& g)
     g.setFont (theme::font (13.0f, true));
     g.drawText (header, 16, 8, getWidth() - 120, 22, juce::Justification::centredLeft, false);
 
-    // Section labels
+    // Section labels: vertically centred against their pill rows.
+    // Row Y / heights must match the layout constants in resized():
+    // rootY=44, bassY=74, qualY=104 (row height 18), subY=192 (chip height 22),
+    // pillH=24, label height=16.
     auto drawLabel = [&] (const juce::String& t, int x, int y)
     {
         g.setColour (theme::textDim);
@@ -130,10 +139,12 @@ void ChordEditorPanel::paint (juce::Graphics& g)
         g.drawText (t, x, y, 80, 16, juce::Justification::centredLeft, false);
     };
 
-    drawLabel ("ROOT", 16, 28);
-    drawLabel ("BASS", 16, 58);
-    drawLabel ("QUALITY", 16, 88);
-    drawLabel ("SUBS", 16, 192);
+    const int labelH = 16;
+    drawLabel ("ROOT", 16, 44 + (24 - labelH) / 2);      // = 48
+    drawLabel ("BASS", 16, 74 + (24 - labelH) / 2);      // = 78
+    drawLabel ("QUALITY", 16, 104 + (18 - labelH) / 2);  // = 105, first quality row
+    drawLabel ("SUBS", 16, 192 + (22 - labelH) / 2);     // = 195
+
 
     const int activeRoot = chord.has_value() ? chord->rootPitchClass : -1;
     const int activeBass = chord.has_value()

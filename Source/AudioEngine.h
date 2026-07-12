@@ -137,5 +137,11 @@ private:
     std::atomic<int> mPlayingSlotShared { -1 };
     bool mFirstBlock = false;
 
+    // Audio-thread-only tracking of currently sounding notes.
+    static constexpr int kMaxSoundingNotes = 16;
+    int mSoundingNotes[kMaxSoundingNotes] = {};
+    int mNumSoundingNotes = 0;
+    const void* mActiveChordDataPtr = nullptr; // last seen ChordData address
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

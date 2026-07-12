@@ -10,7 +10,10 @@ ReharmLookAndFeel::ReharmLookAndFeel()
     setColour (juce::ComboBox::arrowColourId, theme::textDim);
     setColour (juce::ComboBox::focusedOutlineColourId, theme::accent);
 
-    setColour (juce::PopupMenu::backgroundColourId, theme::surfaceHi);
+    // Transparent so the popup window itself is created non-opaque; the rounded
+    // panel is painted in drawPopupMenuBackground, leaving the corners see-through.
+    setColour (juce::PopupMenu::backgroundColourId, juce::Colours::transparentBlack);
+
     setColour (juce::PopupMenu::textColourId, theme::text);
     setColour (juce::PopupMenu::highlightedBackgroundColourId, theme::accent);
     setColour (juce::PopupMenu::highlightedTextColourId, theme::text);
@@ -109,7 +112,11 @@ void ReharmLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& 
 
 void ReharmLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
 {
+    // Clear the whole area first so the region outside the rounded rectangle
+    // (the four corners) stays fully transparent.
+    g.fillAll (juce::Colours::transparentBlack);
     g.setColour (theme::surfaceHi);
+
     g.fillRoundedRectangle (0.0f, 0.0f, (float) width, (float) height, 8.0f);
     g.setColour (theme::border);
     g.drawRoundedRectangle (0.5f, 0.5f, (float) width - 1.0f, (float) height - 1.0f, 8.0f, 1.0f);

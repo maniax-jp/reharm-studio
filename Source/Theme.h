@@ -32,8 +32,8 @@ inline juce::Font font (float height, bool bold = false)
 /** Shared UI display / selection state owned by MainComponent. */
 struct DisplayState
 {
-    bool showDegree = false;
-    reharm::Voicing::Style voicingStyle = reharm::Voicing::Style::Close;
+    reharm::Voicing::Style voicingStyle
+ = reharm::Voicing::Style::Close;
     int selectedBar = -1;
     int selectedSlot = -1;
 

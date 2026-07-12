@@ -49,8 +49,8 @@ MainComponent::MainComponent()
     chordEditor.setDisplayState (&display);
 
     headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
-    headerBar.setShowDegree (display.showDegree);
     headerBar.setVoicingClose (display.voicingStyle == reharm::Voicing::Style::Close);
+
 
     headerBar.onKeyChanged = [this] (int tonic, bool isMajor)
     {
@@ -64,13 +64,8 @@ MainComponent::MainComponent()
         updateEditorVisibility();
     };
 
-    headerBar.onShowDegreeChanged = [this] (bool showDegree)
-    {
-        display.showDegree = showDegree;
-        sequencerView.repaint();
-    };
-
     headerBar.onVoicingChanged = [this] (bool close)
+
     {
         display.voicingStyle = close ? reharm::Voicing::Style::Close
                                      : reharm::Voicing::Style::Open;
@@ -189,8 +184,15 @@ void MainComponent::refreshAnalysis()
 
 void MainComponent::pushChordDataToEngine()
 {
-    const auto flat = model.flatten();
+    auto flat = model.flatten();
+
+    // Trim trailing rests so playback loops right after the last populated slot.
+    // Interior rests (followed by a chord later) are preserved.
+    while (! flat.empty() && ! flat.back().chord.has_value())
+        flat.pop_back();
+
     std::vector<std::vector<int>> notes;
+
     std::vector<double> beats;
     notes.reserve (flat.size());
     beats.reserve (flat.size());

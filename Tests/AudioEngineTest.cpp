@@ -128,7 +128,8 @@ public:
             midi.clear();
             engine.processBlock (buffer, midi);
 
-            expect (midi.getNumEvents() == 3, "Should send NoteOff for all notes when stopping");
+            // 3 note-offs for the sounding chord plus one allNotesOff safety message.
+            expect (midi.getNumEvents() == 4, "Should send NoteOff for all notes plus allNotesOff when stopping");
         }
 
         beginTest ("PluginInstanceGetter");
@@ -220,6 +221,130 @@ public:
             engine.processBlock (buffer, midi);
 
             expect (engine.getCurrentPlayingSlot() >= 0, "Playing slot should be >= 0 after playback starts");
+        }
+
+        beginTest ("ChordDataSwapDuringPlayback sends NoteOff for old notes");
+        {
+            AudioEngine engine;
+            double sampleRate = 44100.0;
+            int bpm = 60; // 1 beat = 1 second
+            engine.prepareToPlay (512, sampleRate);
+            engine.setBpm (bpm);
+
+            // Original: C Major (notes 60, 64, 67), 4 beats
+            auto chordData1 = std::make_shared<ChordData>();
+            chordData1->totalChords = 1;
+            chordData1->notes.push_back ({60, 64, 67});
+            chordData1->beats.push_back (4.0);
+            chordData1->totalBeats = 4.0;
+            engine.setChordData (chordData1);
+            engine.startPlayback();
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+            engine.processBlock (buffer, midi);
+
+            // First block: 3 NoteOn events for C Major
+            expect (midi.getNumEvents() == 3, "Should have 3 NoteOn at start");
+            midi.clear();
+
+            // Process another block without transition (short block, no chord change)
+            engine.processBlock (buffer, midi);
+            midi.clear();
+
+            // Swap to new chord data: G Major (notes 67, 71, 74)
+            auto chordData2 = std::make_shared<ChordData>();
+            chordData2->totalChords = 1;
+            chordData2->notes.push_back ({67, 71, 74});
+            chordData2->beats.push_back (4.0);
+            chordData2->totalBeats = 4.0;
+            engine.setChordData (chordData2);
+
+            // Next processBlock should send NoteOff for old notes (60, 64, 67)
+            // and NoteOn for new notes (67, 71, 74)
+            engine.processBlock (buffer, midi);
+
+            // Check that note-off events for old notes exist
+            bool foundOldNoteOff = false;
+            bool foundNewNoteOn = false;
+            for (const auto meta : midi)
+            {
+                const auto msg = meta.getMessage();
+                if (msg.isNoteOff())
+                {
+                    if (msg.getNoteNumber() == 60 || msg.getNoteNumber() == 64)
+                        foundOldNoteOff = true;
+                }
+                if (msg.isNoteOn())
+                {
+                    if (msg.getNoteNumber() == 71 || msg.getNoteNumber() == 74)
+                        foundNewNoteOn = true;
+                }
+            }
+            expect (foundOldNoteOff, "Should send NoteOff for old chord notes after swap");
+            expect (foundNewNoteOn, "Should send NoteOn for new chord notes after swap");
+        }
+
+        beginTest ("StopAfterSwap sends NoteOff and allNotesOff");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+            engine.setBpm (60);
+
+            // Original chord data
+            auto chordData1 = std::make_shared<ChordData>();
+            chordData1->totalChords = 1;
+            chordData1->notes.push_back ({60, 64, 67});
+            chordData1->beats.push_back (4.0);
+            chordData1->totalBeats = 4.0;
+            engine.setChordData (chordData1);
+            engine.startPlayback();
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+            engine.processBlock (buffer, midi);
+            midi.clear();
+
+            // Swap chord data
+            auto chordData2 = std::make_shared<ChordData>();
+            chordData2->totalChords = 1;
+            chordData2->notes.push_back ({72, 76, 79});
+            chordData2->beats.push_back (4.0);
+            chordData2->totalBeats = 4.0;
+            engine.setChordData (chordData2);
+
+            // Process to trigger swap
+            engine.processBlock (buffer, midi);
+            midi.clear();
+
+            // Stop playback
+            engine.stopPlayback();
+            engine.processBlock (buffer, midi);
+
+            // Should have note-off events (from mSoundingNotes) and allNotesOff
+            bool foundNoteOff = false;
+            bool foundAllNotesOff = false;
+            for (const auto meta : midi)
+            {
+                const auto msg = meta.getMessage();
+                if (msg.isNoteOff())
+                    foundNoteOff = true;
+                if (msg.isAllNotesOff())
+                    foundAllNotesOff = true;
+            }
+            expect (foundNoteOff, "Should send NoteOff for sounding notes on stop");
+            expect (foundAllNotesOff, "Should send allNotesOff on stop");
+
+            // After stop, further processBlock should not produce noteOn
+            midi.clear();
+            engine.processBlock (buffer, midi);
+            bool foundNoteOn = false;
+            for (const auto meta : midi)
+            {
+                if (meta.getMessage().isNoteOn())
+                    foundNoteOn = true;
+            }
+            expect (!foundNoteOn, "Should not send NoteOn after stop");
         }
     }
 };

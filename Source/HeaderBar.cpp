@@ -27,15 +27,8 @@ HeaderBar::HeaderBar()
     presetBox.onChange = [this] { handlePresetChanged(); };
     addAndMakeVisible (presetBox);
 
-    degreeToggle.setLeftActive (false); // default: Name (right)
-    degreeToggle.onChanged = [this] (bool leftActive)
-    {
-        if (onShowDegreeChanged)
-            onShowDegreeChanged (leftActive); // Deg = left = showDegree
-    };
-    addAndMakeVisible (degreeToggle);
-
     voicingToggle.setLeftActive (true); // default: Close
+
     voicingToggle.onChanged = [this] (bool leftActive)
     {
         if (onVoicingChanged)
@@ -50,12 +43,8 @@ void HeaderBar::setKey (int tonicPitchClass, bool isMajor)
     scaleBox.setSelectedId (isMajor ? 1 : 2, juce::dontSendNotification);
 }
 
-void HeaderBar::setShowDegree (bool showDegree)
-{
-    degreeToggle.setLeftActive (showDegree);
-}
-
 void HeaderBar::setVoicingClose (bool close)
+
 {
     voicingToggle.setLeftActive (close);
 }
@@ -128,7 +117,6 @@ void HeaderBar::resized()
     area.removeFromLeft (12);
 
     const int toggleW = 100;
-    degreeToggle.setBounds (area.removeFromLeft (toggleW).withSizeKeepingCentre (toggleW, comboH));
-    area.removeFromLeft (gap);
     voicingToggle.setBounds (area.removeFromLeft (toggleW).withSizeKeepingCentre (toggleW, comboH));
+
 }

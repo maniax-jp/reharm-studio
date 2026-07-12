@@ -212,6 +212,44 @@ public:
             expectEquals (model.getKey().tonicPitchClass, 7);
             expect (!model.getKey().isMajor);
         }
+
+        beginTest ("applyToModel: Pop Punk in G minor uses relative major (A#)");
+        {
+            ProgressionModel model;
+            model.setKey ({7, false}); // G minor
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [2], model); // Pop Punk
+
+            // tonic = (7+3)%12 = 10 (A# major, relative major of G minor)
+            // bar0: I = A# major -> root = (10+0)%12 = 10
+            auto c0 = model.getChord (0, 0);
+            expect (c0.has_value());
+            expectEquals (c0->rootPitchClass, 10);
+            expectEquals ((int) c0->quality, (int) ChordQuality::Major);
+
+            // bar2: vi = G minor -> root = (10+9)%12 = 7
+            auto c2 = model.getChord (2, 0);
+            expect (c2.has_value());
+            expectEquals (c2->rootPitchClass, 7);
+            expectEquals ((int) c2->quality, (int) ChordQuality::Minor);
+        }
+
+        beginTest ("applyToModel: Royal Road in A minor uses relative major (C)");
+        {
+            ProgressionModel model;
+            model.setKey ({9, false}); // A minor
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [0], model); // Royal Road
+
+            // tonic = (9+3)%12 = 0 (C major, relative major of A minor)
+            // bar0: IV = F Major7 -> root = (0+5)%12 = 5
+            auto c0 = model.getChord (0, 0);
+            expect (c0.has_value());
+            expectEquals (c0->rootPitchClass, 5);
+            expectEquals ((int) c0->quality, (int) ChordQuality::Major7);
+        }
     }
 };
 
