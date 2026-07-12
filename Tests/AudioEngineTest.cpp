@@ -346,6 +346,97 @@ public:
             }
             expect (!foundNoteOn, "Should not send NoteOn after stop");
         }
+
+        beginTest ("FallbackSynthProducesAudioWithoutPlugin");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+            engine.setBpm (120);
+
+            auto chordData = std::make_shared<ChordData>();
+            chordData->totalChords = 1;
+            chordData->notes.push_back ({60, 64, 67});
+            chordData->beats.push_back (4.0);
+            chordData->totalBeats = 4.0;
+            engine.setChordData (chordData);
+            engine.startPlayback();
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+
+            for (int i = 0; i < 10; ++i)
+            {
+                buffer.clear();
+                midi.clear();
+                engine.processBlock (buffer, midi);
+            }
+
+            expect (buffer.getMagnitude(0, 0, 512) > 0.0f,
+                    "Fallback synth should produce audio without plugin");
+        }
+
+        beginTest ("FallbackSynthSilentWhenStopped");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+
+            for (int i = 0; i < 10; ++i)
+            {
+                buffer.clear();
+                midi.clear();
+                engine.processBlock (buffer, midi);
+            }
+
+            expect (buffer.getMagnitude(0, 0, 512) < 1.0e-6f,
+                    "Fallback synth should be silent when not playing");
+        }
+
+        beginTest ("FallbackSynthStopsAfterStopPlayback");
+        {
+            AudioEngine engine;
+            double sampleRate = 44100.0;
+            int blockSize = 512;
+            engine.prepareToPlay (blockSize, sampleRate);
+            engine.setBpm (120);
+
+            auto chordData = std::make_shared<ChordData>();
+            chordData->totalChords = 1;
+            chordData->notes.push_back ({60, 64, 67});
+            chordData->beats.push_back (4.0);
+            chordData->totalBeats = 4.0;
+            engine.setChordData (chordData);
+            engine.startPlayback();
+
+            juce::AudioBuffer<float> buffer (2, blockSize);
+            juce::MidiBuffer midi;
+
+            // Start playback (triggers note-on)
+            buffer.clear();
+            midi.clear();
+            engine.processBlock (buffer, midi);
+
+            // Stop playback (triggers note-off, starts ADSR release)
+            engine.stopPlayback();
+            buffer.clear();
+            midi.clear();
+            engine.processBlock (buffer, midi);
+
+            // Process enough blocks for the ADSR release tail to finish (0.08s).
+            // 0.08s = 3528 samples; with 512-sample blocks, 8 blocks = 4096 samples.
+            for (int i = 0; i < 8; ++i)
+            {
+                buffer.clear();
+                midi.clear();
+                engine.processBlock (buffer, midi);
+            }
+
+            // After release tail, buffer should be silent.
+            expect (buffer.getMagnitude(0, 0, blockSize) < 1.0e-6f,
+                    "Fallback synth should go silent after stopPlayback and release tail");
+        }
     }
 };
 

@@ -3,6 +3,11 @@
 AudioEngine::AudioEngine()
 {
     std::atomic_store(&mCurrentChordData, std::make_shared<ChordData>());
+
+    // Register 16 voices and one sound for the fallback triangle synthesiser.
+    for (int i = 0; i < 16; ++i)
+        mFallbackSynth.addVoice (new TriangleVoice());
+    mFallbackSynth.addSound (new TriangleSound());
 }
 
 void AudioEngine::beginPluginLoad()
@@ -25,6 +30,7 @@ void AudioEngine::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
     juce::ScopedLock sl (pluginLock);
     mSampleRate = sampleRate;
     mPlayHead.sampleRate = sampleRate;
+    mFallbackSynth.setCurrentPlaybackSampleRate (sampleRate);
 
     if (mPluginInstance != nullptr)
     {
@@ -273,10 +279,12 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     mPlayHead.playing = mIsPlaying.load();
     mPlayHead.ppq = blockStartPpq;
 
+    bool pluginWasReady = false;
     {
         juce::ScopedLock sl (pluginLock);
         if (mPluginInstance != nullptr && std::atomic_load(&mPluginReady))
         {
+            pluginWasReady = true;
             int numDeviceCh = buffer.getNumChannels();
             int numPluginOut = mPluginInstance->getTotalNumOutputChannels();
             int numCh = juce::jmax (numDeviceCh, numPluginOut);
@@ -294,6 +302,11 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
                 juce::Logger::writeToLog ("Exception caught during plugin processBlock");
             }
         }
+    }
+
+    if (!pluginWasReady)
+    {
+        mFallbackSynth.renderNextBlock (buffer, midiMessages, 0, buffer.getNumSamples());
     }
 
     mPlayHead.samples += buffer.getNumSamples();
