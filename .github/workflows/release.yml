@@ -1,20 +1,48 @@
-name: Release
+name: Build & Release
 
-on:
+"on":
   push:
-    branches:
-      - main
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRODUCT_NAME: Reharm Studio
 
 jobs:
   build:
+    name: Build & Package (macOS)
     runs-on: macos-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      zip_name: ${{ steps.package.outputs.zip_name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.0.0-$(git rev-parse --short HEAD)"
+          fi
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::Resolved version is empty (ref: ${GITHUB_REF})"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VERSION}"
 
       - name: Install dependencies
         run: |
@@ -29,21 +57,64 @@ jobs:
 
       - name: Ad-hoc Signing
         run: |
-          codesign --force --deep --sign - "build/ReharmStudio_artefacts/Release/Reharm Studio.app"
+          codesign --force --deep --sign - "build/ReharmStudio_artefacts/Release/${PRODUCT_NAME}.app"
 
       - name: Clear Extended Attributes
         run: |
-          xattr -cr "build/ReharmStudio_artefacts/Release/Reharm Studio.app"
+          xattr -cr "build/ReharmStudio_artefacts/Release/${PRODUCT_NAME}.app"
 
-      - name: Create ZIP
+      - name: Package (zip)
+        id: package
         run: |
-          ditto -ck --keepParent "build/ReharmStudio_artefacts/Release/Reharm Studio.app" "ReharmStudio.zip"
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_NAME="ReharmStudio-${VERSION}-macOS.zip"
+          ditto -ck --keepParent "build/ReharmStudio_artefacts/Release/${PRODUCT_NAME}.app" "$ZIP_NAME"
+          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Packaged: ${ZIP_NAME}"
 
-      - name: Create Release
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.zip_name }}
+          path: ${{ steps.package.outputs.zip_name }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ needs.build.outputs.zip_name }}
+          path: dist
+
+      - name: Verify zip present
+        id: locate
+        env:
+          ZIP_NAME: ${{ needs.build.outputs.zip_name }}
+        run: |
+          set -euo pipefail
+          ZIP_PATH="dist/${ZIP_NAME}"
+          if [[ ! -f "$ZIP_PATH" ]]; then
+            ZIP_PATH="$(find dist -name "${ZIP_NAME}" -maxdepth 2 | head -n1)"
+          fi
+          if [[ -z "$ZIP_PATH" || ! -f "$ZIP_PATH" ]]; then
+            echo "::error::Packaged zip ${ZIP_NAME} not found in downloaded artifacts"
+            exit 1
+          fi
+          echo "zip_path=${ZIP_PATH}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: ReharmStudio.zip
-          tag_name: v${{ github.run_number }}
-          name: Release v${{ github.run_number }}
+          files: ${{ steps.locate.outputs.zip_path }}
+          name: Release v${{ needs.build.outputs.version }}
+          generate_release_notes: true
           draft: false
           prerelease: false

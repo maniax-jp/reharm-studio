@@ -199,13 +199,22 @@ cmake --build . --target PresetSwitchTest
 
 ## CI/CD
 
-GitHub Actions により、`main` ブランチへの push 時に自動的にビルド・リリースが行われます。
+GitHub Actions により、バージョンタグ（`v17.0.1` のような `v*` 形式）の push をトリガーに自動的にビルド・リリースが行われます。Pull Request 時にはビルド検証のみ実行されます。
 
+- **バージョン算出**: タグ `vX.Y.Z` から `X.Y.Z` を抽出（タグ以外では `0.0.0-<short SHA>`）
 - **ビルド**: `cmake --preset release` による Release ビルド
 - **署名**: ad-hoc コード署名（`codesign --sign -`）
 - **拡張属性の削除**: `xattr -cr` によるクアランティン属性のクリア
-- **アーカイブ**: `.app` を ZIP 圧縮
-- **リリース**: GitHub Releases に自動アップロード（タグ: `v${{ github.run_number }}`）
+- **アーカイブ**: `.app` を `ReharmStudio-X.Y.Z-macOS.zip` として ZIP 圧縮
+- **リリース**: タグ push 時のみ GitHub Releases に自動アップロード（リリースノート自動生成）
+
+リリース手順:
+
+```bash
+# CMakeLists.txt の project(ReharmStudio VERSION X.Y.Z) を更新してコミット後
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
 
 ## 技術仕様
 
