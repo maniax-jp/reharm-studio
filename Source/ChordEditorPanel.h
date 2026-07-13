@@ -23,6 +23,10 @@ public:
 
     std::function<void()> onEdited; // optional; model.onChanged already fires
 
+    /** Public accessors for OptionsPanel (CallOutBox content). */
+    std::optional<reharm::Chord> currentChordForOptions() const;
+    void applyChordFromOptions (const reharm::Chord& c);
+
     void paint (juce::Graphics& g) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent& e) override;
@@ -32,15 +36,16 @@ private:
     DisplayState* display = nullptr;
 
     juce::TextButton clearButton { "Clear" };
+    juce::TextButton optionsButton { "OPT" };
 
     static constexpr int kNumRoots = 12;
-    static constexpr int kNumBass = 13; // -- + 12
-    static constexpr int kNumQualities = static_cast<int> (reharm::ChordQuality::NumQualities);
-    static constexpr int kQualityCols = 7;
+    static constexpr int kNumBass = 13;
 
     juce::Rectangle<int> rootPills[kNumRoots];
     juce::Rectangle<int> bassPills[kNumBass];
-    juce::Rectangle<int> qualityPills[kNumQualities];
+
+    /** Flat list of quality pills built from DYAD / TRIAD / 7TH groups. */
+    std::vector<std::pair<reharm::ChordQuality, juce::Rectangle<int>>> qualityPills;
 
     struct SubChip
     {
@@ -53,6 +58,7 @@ private:
     void applyChord (const reharm::Chord& c);
     void clearSlot();
     void rebuildSubChips();
+    void updateOptionsButton();
 
     void paintPill (juce::Graphics& g, juce::Rectangle<int> r,
                     const juce::String& label, bool active);

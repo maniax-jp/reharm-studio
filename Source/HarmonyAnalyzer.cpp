@@ -30,7 +30,6 @@ int presetRootOffset (const Chord& c, const KeyContext& key) noexcept
 bool isDominantQuality (ChordQuality q) noexcept
 {
     return q == ChordQuality::Dominant7
-        || q == ChordQuality::Dominant9
         || q == ChordQuality::Dominant7Sus4
         || q == ChordQuality::Augmented7;
 }
@@ -39,7 +38,6 @@ bool isPicardyQuality (ChordQuality q) noexcept
 {
     return q == ChordQuality::Major
         || q == ChordQuality::Major7
-        || q == ChordQuality::Add9
         || q == ChordQuality::Sixth;
 }
 

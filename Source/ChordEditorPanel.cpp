@@ -6,6 +6,223 @@ namespace
 const char* rootNames[12] = {
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
 };
+
+void paintOptionPill (juce::Graphics& g, juce::Rectangle<int> r,
+                      const juce::String& label, bool active)
+{
+    auto rf = r.toFloat();
+    g.setColour (active ? theme::accent : theme::surfaceHi);
+    g.fillRoundedRectangle (rf, 8.0f);
+    if (!active)
+    {
+        g.setColour (theme::border);
+        g.drawRoundedRectangle (rf.reduced (0.5f), 8.0f, 1.0f);
+    }
+    g.setColour (active ? theme::text : theme::textDim);
+    g.setFont (theme::font (12.0f, true));
+    g.drawText (label, r, juce::Justification::centred, false);
+}
+
+class OptionsPanel : public juce::Component
+{
+public:
+    explicit OptionsPanel (juce::Component::SafePointer<ChordEditorPanel> owner)
+        : owner (owner)
+    {
+        layoutPills();
+        setSize (424, 112);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (theme::surfaceHi);
+
+        auto chordOpt = owner ? owner->currentChordForOptions() : std::nullopt;
+        if (!chordOpt.has_value())
+        {
+            drawLabels (g);
+            return;
+        }
+
+        const auto& chord = *chordOpt;
+        const auto avail = reharm::ChordModel::optionAvailability (chord);
+
+        drawLabels (g);
+
+        for (int i = 0; i < 5; ++i)
+        {
+            const auto& pill = omitAlterPills[i];
+            const bool active = isActive (chord, i, false);
+            const bool available = isAvailable (avail, i, false);
+            const bool disabled = !active && !available;
+
+            g.beginTransparencyLayer (disabled ? 0.3f : 1.0f);
+            paintOptionPill (g, pill.bounds, pill.label, active);
+            g.endTransparencyLayer();
+        }
+
+        for (int i = 0; i < 7; ++i)
+        {
+            const auto& pill = addPills[i];
+            const bool active = isActive (chord, i, true);
+            const bool available = isAvailable (avail, i, true);
+            const bool disabled = !active && !available;
+
+            g.beginTransparencyLayer (disabled ? 0.3f : 1.0f);
+            paintOptionPill (g, pill.bounds, pill.label, active);
+            g.endTransparencyLayer();
+        }
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (!owner) return;
+
+        auto chordOpt = owner->currentChordForOptions();
+        if (!chordOpt.has_value()) return;
+
+        auto c = *chordOpt;
+        const auto avail = reharm::ChordModel::optionAvailability (c);
+
+        for (int i = 0; i < 5; ++i)
+        {
+            if (omitAlterPills[i].bounds.contains (e.getPosition()))
+            {
+                const bool wasActive = isActive (c, i, false);
+                const bool available = isAvailable (avail, i, false);
+
+                if (!wasActive && !available) return;
+
+                toggleOption (c, i, false);
+                reharm::ChordModel::sanitizeOptions (c);
+                owner->applyChordFromOptions (c);
+                repaint();
+                return;
+            }
+        }
+
+        for (int i = 0; i < 7; ++i)
+        {
+            if (addPills[i].bounds.contains (e.getPosition()))
+            {
+                const bool wasActive = isActive (c, i, true);
+                const bool available = isAvailable (avail, i, true);
+
+                if (!wasActive && !available) return;
+
+                toggleOption (c, i, true);
+                reharm::ChordModel::sanitizeOptions (c);
+                owner->applyChordFromOptions (c);
+                repaint();
+                return;
+            }
+        }
+    }
+
+private:
+    juce::Component::SafePointer<ChordEditorPanel> owner;
+
+    struct OptionPill
+    {
+        juce::String label;
+        juce::Rectangle<int> bounds;
+    };
+
+    OptionPill omitAlterPills[5];
+    OptionPill addPills[7];
+
+    void layoutPills()
+    {
+        const int padX = 16;
+        const int pillW = 52;
+        const int pillH = 22;
+        const int pillGap = 4;
+
+        const char* omitLabels[] = { "omit3", "omit5", "omit7", "b5", "#5" };
+        const int row1Y = 26;
+        for (int i = 0; i < 5; ++i)
+            omitAlterPills[i] = { omitLabels[i],
+                { padX + i * (pillW + pillGap), row1Y, pillW, pillH } };
+
+        const char* addLabels[] = { "b9", "9", "#9", "11", "#11", "b13", "13" };
+        const int row2Y = 76;
+        for (int i = 0; i < 7; ++i)
+            addPills[i] = { addLabels[i],
+                { padX + i * (pillW + pillGap), row2Y, pillW, pillH } };
+    }
+
+    void drawLabels (juce::Graphics& g)
+    {
+        g.setColour (theme::textDim);
+        g.setFont (theme::font (11.0f));
+        g.drawText ("OMIT / ALTER", 16, 8, getWidth() - 32, 16,
+                     juce::Justification::centredLeft, false);
+        g.drawText ("ADD", 16, 58, getWidth() - 32, 16,
+                     juce::Justification::centredLeft, false);
+    }
+
+    static bool isActive (const reharm::Chord& chord, int index, bool isAdd)
+    {
+        if (isAdd)
+            return (chord.addMask & (1 << index)) != 0;
+
+        switch (index)
+        {
+            case 0: return (chord.omitMask & reharm::Omit3) != 0;
+            case 1: return (chord.omitMask & reharm::Omit5) != 0;
+            case 2: return (chord.omitMask & reharm::Omit7) != 0;
+            case 3: return chord.fifthAlt == reharm::FifthAlt::Flat;
+            case 4: return chord.fifthAlt == reharm::FifthAlt::Sharp;
+            default: return false;
+        }
+    }
+
+    static bool isAvailable (const reharm::ChordModel::OptionAvailability& avail,
+                              int index, bool isAdd)
+    {
+        if (isAdd)
+            return avail.add[index];
+
+        switch (index)
+        {
+            case 0: return avail.omit3;
+            case 1: return avail.omit5;
+            case 2: return avail.omit7;
+            case 3: return avail.flat5;
+            case 4: return avail.sharp5;
+            default: return false;
+        }
+    }
+
+    static void toggleOption (reharm::Chord& chord, int index, bool isAdd)
+    {
+        if (isAdd)
+        {
+            chord.addMask ^= (1 << index);
+            return;
+        }
+
+        switch (index)
+        {
+            case 0: chord.omitMask ^= reharm::Omit3; break;
+            case 1: chord.omitMask ^= reharm::Omit5; break;
+            case 2: chord.omitMask ^= reharm::Omit7; break;
+            case 3:
+                chord.fifthAlt = (chord.fifthAlt == reharm::FifthAlt::Flat)
+                                  ? reharm::FifthAlt::None
+                                  : reharm::FifthAlt::Flat;
+                break;
+            case 4:
+                chord.fifthAlt = (chord.fifthAlt == reharm::FifthAlt::Sharp)
+                                  ? reharm::FifthAlt::None
+                                  : reharm::FifthAlt::Sharp;
+                break;
+            default: break;
+        }
+    }
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OptionsPanel)
+};
 } // namespace
 
 ChordEditorPanel::ChordEditorPanel()
@@ -14,6 +231,17 @@ ChordEditorPanel::ChordEditorPanel()
     clearButton.setColour (juce::TextButton::buttonColourId, theme::surfaceHi);
     clearButton.onClick = [this] { clearSlot(); };
     addAndMakeVisible (clearButton);
+
+    optionsButton.setColour (juce::TextButton::textColourOffId, theme::text);
+    optionsButton.setColour (juce::TextButton::buttonColourId, theme::surfaceHi);
+    optionsButton.onClick = [this]
+    {
+        auto content = std::make_unique<OptionsPanel> (
+            juce::Component::SafePointer<ChordEditorPanel> { this });
+        juce::CallOutBox::launchAsynchronously (std::move (content),
+            optionsButton.getScreenBounds(), nullptr);
+    };
+    addAndMakeVisible (optionsButton);
 }
 
 void ChordEditorPanel::setModel (reharm::ProgressionModel* m)
@@ -35,17 +263,28 @@ std::optional<reharm::Chord> ChordEditorPanel::currentChord() const
     return model->getChord (display->selectedBar, display->selectedSlot);
 }
 
+std::optional<reharm::Chord> ChordEditorPanel::currentChordForOptions() const
+{
+    return currentChord();
+}
+
 void ChordEditorPanel::applyChord (const reharm::Chord& c)
 {
     if (model == nullptr || display == nullptr || ! display->hasSelection())
         return;
     model->setChord (display->selectedBar, display->selectedSlot, c);
     rebuildSubChips();
+    updateOptionsButton();
     // Re-layout the freshly rebuilt chips: rebuildSubChips() creates them with
     // empty bounds, and without this call paint() would skip drawing them until
     // the next external resized() (e.g. reselecting the cell).
     resized();
     repaint();
+}
+
+void ChordEditorPanel::applyChordFromOptions (const reharm::Chord& c)
+{
+    applyChord (c);
 }
 
 void ChordEditorPanel::clearSlot()
@@ -58,7 +297,6 @@ void ChordEditorPanel::clearSlot()
     repaint();
 }
 
-
 void ChordEditorPanel::rebuildSubChips()
 {
     subChips.clear();
@@ -67,7 +305,6 @@ void ChordEditorPanel::rebuildSubChips()
         return;
 
     auto candidates = reharm::HarmonyAnalyzer::substitutions (*chord, model->getKey());
-    // Layout done in resized / paint pass; store candidates, bounds set in resized
     for (auto& c : candidates)
         subChips.push_back ({ std::move (c), {} });
 }
@@ -75,8 +312,18 @@ void ChordEditorPanel::rebuildSubChips()
 void ChordEditorPanel::refreshFromSelection()
 {
     rebuildSubChips();
+    updateOptionsButton();
     resized();
     repaint();
+}
+
+void ChordEditorPanel::updateOptionsButton()
+{
+    auto chord = currentChord();
+    optionsButton.setEnabled (chord.has_value());
+    optionsButton.setColour (juce::TextButton::textColourOffId,
+                             chord.has_value() && chord->hasOptions() ? theme::accent
+                                                                      : theme::text);
 }
 
 void ChordEditorPanel::paintPill (juce::Graphics& g, juce::Rectangle<int> r,
@@ -118,7 +365,6 @@ void ChordEditorPanel::paint (juce::Graphics& g)
     const int bar = display->selectedBar;
     const int slot = display->selectedSlot;
 
-    // Header line
     juce::String header = "Bar " + juce::String (bar + 1)
                           + " / Slot " + juce::String (slot + 1);
     if (chord.has_value())
@@ -128,10 +374,7 @@ void ChordEditorPanel::paint (juce::Graphics& g)
     g.setFont (theme::font (13.0f, true));
     g.drawText (header, 16, 8, getWidth() - 120, 22, juce::Justification::centredLeft, false);
 
-    // Section labels: vertically centred against their pill rows.
-    // Row Y / heights must match the layout constants in resized():
-    // rootY=44, bassY=74, qualY=104 (row height 18), subY=192 (chip height 22),
-    // pillH=24, label height=16.
+    // Section labels for ROOT, BASS, SUBS
     auto drawLabel = [&] (const juce::String& t, int x, int y)
     {
         g.setColour (theme::textDim);
@@ -140,11 +383,24 @@ void ChordEditorPanel::paint (juce::Graphics& g)
     };
 
     const int labelH = 16;
-    drawLabel ("ROOT", 16, 44 + (24 - labelH) / 2);      // = 48
-    drawLabel ("BASS", 16, 74 + (24 - labelH) / 2);      // = 78
-    drawLabel ("QUALITY", 16, 104 + (18 - labelH) / 2);  // = 105, first quality row
-    drawLabel ("SUBS", 16, 192 + (22 - labelH) / 2);     // = 195
+    drawLabel ("ROOT", 16, 44 + (24 - labelH) / 2);
+    drawLabel ("BASS", 16, 74 + (24 - labelH) / 2);
+    drawLabel ("SUBS", 16, 192 + (22 - labelH) / 2);
 
+    // Quality group labels (DYAD, TRIAD, 7TH)
+    {
+        g.setColour (theme::textDim);
+        g.setFont (theme::font (11.0f));
+        const auto& groups = reharm::ChordModel::qualityGroups();
+        int row = 0;
+        for (const auto& group : groups)
+        {
+            const int y = 104 + row * 20;
+            g.drawText (group.label, 16, y + (18 - labelH) / 2, 50, labelH,
+                        juce::Justification::centredLeft, false);
+            ++row;
+        }
+    }
 
     const int activeRoot = chord.has_value() ? chord->rootPitchClass : -1;
     const int activeBass = chord.has_value()
@@ -163,13 +419,8 @@ void ChordEditorPanel::paint (juce::Graphics& g)
         paintPill (g, bassPills[i], label, active);
     }
 
-    for (int i = 0; i < kNumQualities; ++i)
-    {
-        const auto q = static_cast<reharm::ChordQuality> (i);
-        paintPill (g, qualityPills[i],
-                   reharm::ChordModel::qualityDisplayName (q),
-                   q == activeQ);
-    }
+    for (const auto& [q, r] : qualityPills)
+        paintPill (g, r, reharm::ChordModel::qualityDisplayName (q), q == activeQ);
 
     for (const auto& chip : subChips)
         if (! chip.bounds.isEmpty())
@@ -178,12 +429,12 @@ void ChordEditorPanel::paint (juce::Graphics& g)
 
 void ChordEditorPanel::resized()
 {
+    optionsButton.setBounds (getWidth() - 170, 8, 74, 24);
     clearButton.setBounds (getWidth() - 90, 8, 74, 24);
 
     const int pillH = 24;
     const int rootY = 44;
     const int bassY = 74;
-    const int qualY = 104;
     const int subY = 192;
 
     const int startX = 70;
@@ -204,16 +455,28 @@ void ChordEditorPanel::resized()
             bassPills[i] = { startX + i * (pw + gap), bassY, pw, pillH };
     }
 
-    // Quality: 7 columns x ~4 rows
+    // Quality: grouped rows (DYAD / TRIAD / 7TH) with unified pill width
     {
-        const int cols = kQualityCols;
-        const int pw = (avail - gap * (cols - 1)) / cols;
+        const int qualStartY = 104;
+        const int rowGap = 20;
         const int ph = 18;
-        for (int i = 0; i < kNumQualities; ++i)
+        const int maxInRow = 13;
+        const int pw = (avail - gap * (maxInRow - 1)) / maxInRow;
+
+        qualityPills.clear();
+        const auto& groups = reharm::ChordModel::qualityGroups();
+        int row = 0;
+        for (const auto& group : groups)
         {
-            const int row = i / cols;
-            const int col = i % cols;
-            qualityPills[i] = { startX + col * (pw + gap), qualY + row * (ph + 2), pw, ph };
+            const int y = qualStartY + row * rowGap;
+            int col = 0;
+            for (const auto& q : group.qualities)
+            {
+                const int x = startX + col * (pw + gap);
+                qualityPills.push_back ({ q, { x, y, pw, ph } });
+                ++col;
+            }
+            ++row;
         }
     }
 
@@ -268,11 +531,12 @@ void ChordEditorPanel::mouseDown (const juce::MouseEvent& e)
         }
     }
 
-    for (int i = 0; i < kNumQualities; ++i)
+    for (const auto& [q, r] : qualityPills)
     {
-        if (qualityPills[i].contains (e.getPosition()))
+        if (r.contains (e.getPosition()))
         {
-            c.quality = static_cast<reharm::ChordQuality> (i);
+            c.quality = q;
+            reharm::ChordModel::sanitizeOptions (c);
             applyChord (c);
             return;
         }
