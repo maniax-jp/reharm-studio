@@ -77,25 +77,20 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 │   ├── HarmonyAnalyzer.*            # パターン検出・ノンダイアトニック分類・置換候補
 │   ├── Theme.*                      # Studio Noir デザインシステム（LookAndFeel・パレット）
 │   ├── HeaderBar.* / SequencerView.* / AnalysisStrip.* / ChordEditorPanel.* / TransportBar.*  # UIコンポーネント
-│   ├── Localization.h               # UI日本語表示（UTF-8安全な変換層）
-│   ├── ChordProgressionGenerator.*  # (旧) コード進行生成
-│   └── ChordTheory.*                # (旧) コード記号 → MIDI ノート変換
+│   └── Localization.h               # UI日本語表示（UTF-8安全な変換層）
 ├── Tests/                           # 単体テスト
 │   ├── TestRunner.cpp               # テストランナー
 │   ├── AudioEngineTest.cpp          # AudioEngine の動作テスト（可変長スロット含む）
 │   ├── ChordModelTest.cpp           # コード理論コア・ボイシングのテスト
 │   ├── ProgressionModelTest.cpp     # シーケンサーモデル・プリセットのテスト
 │   ├── HarmonyAnalyzerTest.cpp      # ハーモニー解析のテスト
-│   ├── ChordProgressionTest.cpp     # (旧) コード進行生成テスト
-│   ├── ChordTheoryTest.cpp          # (旧) コード理論変換テスト
 │   └── TimingTest.cpp               # タイミング計算テスト
 ├── Experiments/                     # 実験的なプログラム（仕様確認・動作検証用）
 │   ├── PluginLoadTest.cpp           # VST3 プラグインのチャンネル構成検証（VPS Avenger 用）
 │   └── PresetSwitchTest.cpp         # プリセット切替・プレイヘッド・エディタ表示の統合テスト
 ├── docs/                            # ドキュメント用アセット（スクリーンショット等）
 ├── CMakeLists.txt
-├── CMakePresets.json
-└── .github/workflows/release.yml    # CI/CD（GitHub Actions による自動ビルド・リリース）
+└── CMakePresets.json
 ```
 
 ## ビルド方法
@@ -166,48 +161,26 @@ cmake --build --preset release
 ### プリセットを使わない場合
 
 ```bash
-# ビルドディレクトリに移動
-mkdir build
-cd build
-
 # 通常のDebugビルド（本体のみ）
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-make
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel 8
 
 # テストを有効にしてビルド
-cmake -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON ..
-cmake --build . --target ReharmStudioTests
+cmake -B build -DBUILD_TESTS=ON
+cmake --build build --parallel 8
 
 # 実験プログラムを有効にしてビルド
-cmake -DCMAKE_BUILD_TYPE=Debug -DBUILD_EXPERIMENTS=ON ..
-cmake --build . --target PluginLoadTest
-cmake --build . --target PresetSwitchTest
+cmake -B build -DBUILD_EXPERIMENTS=ON
+cmake --build build --target PluginLoadTest
+cmake --build build --target PresetSwitchTest
 ```
 
 ### テストの実行
 
+テストを有効にしてビルドしたあと、テストバイナリを実行します。
+
 ```bash
-# テスト付きでビルドしたあと、テストバイナリを実行
 "./build/ReharmStudioTests_artefacts/Debug/Reharm Studio Tests.app/Contents/MacOS/Reharm Studio Tests"
-```
-
-## CI/CD
-
-GitHub Actions により、バージョンタグ（`v17.0.1` のような `v*` 形式）の push をトリガーに自動的にビルド・リリースが行われます。Pull Request 時にはビルド検証のみ実行されます。
-
-- **バージョン算出**: タグ `vX.Y.Z` から `X.Y.Z` を抽出（タグ以外では `0.0.0-<short SHA>`）
-- **ビルド**: `cmake --preset release` による Release ビルド
-- **署名**: ad-hoc コード署名（`codesign --sign -`）
-- **拡張属性の削除**: `xattr -cr` によるクアランティン属性のクリア
-- **アーカイブ**: `.app` を `ReharmStudio-X.Y.Z-macOS.zip` として ZIP 圧縮
-- **リリース**: タグ push 時のみ GitHub Releases に自動アップロード（リリースノート自動生成）
-
-リリース手順:
-
-```bash
-# CMakeLists.txt の project(ReharmStudio VERSION X.Y.Z) を更新してコミット後
-git tag vX.Y.Z
-git push origin vX.Y.Z
 ```
 
 ## 技術仕様
@@ -217,8 +190,6 @@ git push origin vX.Y.Z
 - プラグイン形式: VST3
 - プラットフォーム: macOS
 - ビルドシステム: CMake 3.15+
-- ホストプレイヘッド: `HostPlayHead`（BPM / 拍子 / PPQ位置 / サンプルカウント / 再生状態をプラグインに提供）
-- プラグイン読み込み: ロード中フラグでオーディオコールバックをガードし、オーディオデバイスを閉じずに読み込む設計
 
 ## ライセンス
 

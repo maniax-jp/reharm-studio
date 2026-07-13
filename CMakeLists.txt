@@ -32,10 +32,7 @@ juce_generate_juce_header(ReharmStudio)
 target_sources(ReharmStudio PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
-    Source/ChordProgressionGenerator.h
-    Source/ChordProgressionGenerator.cpp
     Source/AudioEngine.cpp
-    Source/ChordTheory.cpp
     Source/ChordModel.cpp
     Source/ProgressionModel.cpp
     Source/HarmonyAnalyzer.cpp
@@ -87,15 +84,11 @@ juce_generate_juce_header(ReharmStudioTests)
 target_sources(ReharmStudioTests PRIVATE
     Tests/TestRunner.cpp
     Tests/TimingTest.cpp
-    Tests/ChordProgressionTest.cpp
-    Tests/ChordTheoryTest.cpp
     Tests/AudioEngineTest.cpp
     Tests/ChordModelTest.cpp
     Tests/ProgressionModelTest.cpp
     Tests/HarmonyAnalyzerTest.cpp
     Source/MainComponent.cpp
-    Source/ChordProgressionGenerator.cpp
-    Source/ChordTheory.cpp
     Source/AudioEngine.cpp
     Source/ChordModel.cpp
     Source/ProgressionModel.cpp
