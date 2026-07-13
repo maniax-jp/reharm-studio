@@ -41,6 +41,7 @@ const ToneRoles& rolesFor (ChordQuality q) noexcept
         /* Diminished      */ {  3, 6, -1 },
         /* Sixth           */ {  4, 7, -1 },
         /* Minor6          */ {  3, 7, -1 },
+        /* SixthSus4       */ { -1, 7, -1 },
         /* Dominant7       */ {  4, 7, 10 },
         /* Major7          */ {  4, 7, 11 },
         /* Minor7          */ {  3, 7, 10 },
@@ -169,8 +170,6 @@ juce::String commonNameSuffix (ChordQuality q, int addMask)
         {
             case ChordQuality::Major:           return "add9";
             case ChordQuality::Minor:           return "madd9";
-            case ChordQuality::Sixth:           return "69";
-            case ChordQuality::Minor6:          return "m69";
             case ChordQuality::Dominant7:       return "9";
             case ChordQuality::Major7:          return "M9";
             case ChordQuality::Minor7:          return "m9";
@@ -188,7 +187,7 @@ juce::String commonNameSuffix (ChordQuality q, int addMask)
             default: break;
         }
     }
-    else if (addMask == (AddNine | AddThirteen))
+    else if (addMask == (AddNine | AddEleven | AddThirteen))
     {
         switch (q)
         {
@@ -200,6 +199,24 @@ juce::String commonNameSuffix (ChordQuality q, int addMask)
     }
 
     return {};
+}
+
+bool isSixthFamily (ChordQuality q) noexcept
+{
+    return q == ChordQuality::Sixth
+        || q == ChordQuality::Minor6
+        || q == ChordQuality::SixthSus4;
+}
+
+/** Prefix before parentheses when folding 6 into option list. */
+const char* sixthFamilyPrefix (ChordQuality q) noexcept
+{
+    switch (q)
+    {
+        case ChordQuality::Minor6:    return "m";
+        case ChordQuality::SixthSus4: return "sus4";
+        default:                      return "";
+    }
 }
 
 juce::String optionSuffix (const Chord& c)
@@ -215,6 +232,24 @@ juce::String optionSuffix (const Chord& c)
             result += "(b5)";
         else if (c.fifthAlt == FifthAlt::Sharp)
             result += "(#5)";
+    }
+    else if (isSixthFamily (c.quality) && c.addMask != 0)
+    {
+        // Fold the quality's "6" into the option list: C(6,9), Cm(6,9), Csus4(6,9).
+        juce::StringArray parts;
+        parts.add ("6");
+
+        if (c.fifthAlt == FifthAlt::Flat)
+            parts.add ("b5");
+        else if (c.fifthAlt == FifthAlt::Sharp)
+            parts.add ("#5");
+
+        for (int i = 0; i < 7; ++i)
+            if (hasAddBit (c.addMask, i))
+                parts.add (kAddNames[i]);
+
+        result = juce::String (sixthFamilyPrefix (c.quality))
+                 + "(" + parts.joinIntoString (",") + ")";
     }
     else
     {
@@ -264,6 +299,7 @@ const std::vector<int>& ChordModel::intervals (ChordQuality q)
         /* Diminished      */ { 0, 3, 6 },
         /* Sixth           */ { 0, 4, 7, 9 },
         /* Minor6          */ { 0, 3, 7, 9 },
+        /* SixthSus4       */ { 0, 5, 7, 9 },
         /* Dominant7       */ { 0, 4, 7, 10 },
         /* Major7          */ { 0, 4, 7, 11 },
         /* Minor7          */ { 0, 3, 7, 10 },
@@ -380,7 +416,8 @@ const std::vector<ChordModel::QualityGroup>& ChordModel::qualityGroups()
     static const std::vector<QualityGroup> groups = {
         { "DYAD",  { ChordQuality::Power5 } },
         { "TRIAD", { ChordQuality::Major, ChordQuality::Minor, ChordQuality::Sus2, ChordQuality::Sus4,
-                     ChordQuality::Augmented, ChordQuality::Diminished, ChordQuality::Sixth, ChordQuality::Minor6 } },
+                     ChordQuality::Augmented, ChordQuality::Diminished } },
+        { "6TH",   { ChordQuality::Sixth, ChordQuality::Minor6, ChordQuality::SixthSus4 } },
         { "7TH",   { ChordQuality::Dominant7, ChordQuality::Major7, ChordQuality::Minor7, ChordQuality::MinorMajor7,
                      ChordQuality::Dominant7Sus2, ChordQuality::Dominant7Sus4, ChordQuality::Major7Sus2, ChordQuality::Major7Sus4,
                      ChordQuality::Minor7Flat5, ChordQuality::Diminished7, ChordQuality::Augmented7,
@@ -402,6 +439,7 @@ juce::String ChordModel::qualitySuffix (ChordQuality q)
         case ChordQuality::Diminished:      return "dim";
         case ChordQuality::Sixth:           return "6";
         case ChordQuality::Minor6:          return "m6";
+        case ChordQuality::SixthSus4:       return "6sus4";
         case ChordQuality::Dominant7:       return "7";
         case ChordQuality::Major7:          return "M7";
         case ChordQuality::Minor7:          return "m7";
