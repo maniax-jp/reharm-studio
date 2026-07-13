@@ -20,6 +20,7 @@ enum class ChordQuality
     Diminished,       // Cdim    {0,3,6}
     Sixth,            // C6      {0,4,7,9}
     Minor6,           // Cm6     {0,3,7,9}
+    SixthSus4,        // C6sus4  {0,5,7,9}
     // 7th chords (4 notes)
     Dominant7,        // C7      {0,4,7,10}
     Major7,           // CM7     {0,4,7,11}
@@ -118,7 +119,7 @@ public:
         const char* label;
         std::vector<ChordQuality> qualities;
     };
-    /** Quality selector groups for the editor UI: dyad / triad / 7th. */
+    /** Quality selector groups for the editor UI: dyad / triad / 6th / 7th. */
     static const std::vector<QualityGroup>& qualityGroups();
 
     /** Suffix appended to the root name, e.g. "m7", "M7sus4", "" for major. */

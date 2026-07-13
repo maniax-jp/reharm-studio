@@ -22,6 +22,7 @@ public:
             expect (ChordModel::intervals (ChordQuality::Diminished)      == std::vector<int> ({ 0, 3, 6 }));
             expect (ChordModel::intervals (ChordQuality::Sixth)           == std::vector<int> ({ 0, 4, 7, 9 }));
             expect (ChordModel::intervals (ChordQuality::Minor6)          == std::vector<int> ({ 0, 3, 7, 9 }));
+            expect (ChordModel::intervals (ChordQuality::SixthSus4)       == std::vector<int> ({ 0, 5, 7, 9 }));
             expect (ChordModel::intervals (ChordQuality::Dominant7)       == std::vector<int> ({ 0, 4, 7, 10 }));
             expect (ChordModel::intervals (ChordQuality::Major7)          == std::vector<int> ({ 0, 4, 7, 11 }));
             expect (ChordModel::intervals (ChordQuality::Minor7)          == std::vector<int> ({ 0, 3, 7, 10 }));
@@ -80,11 +81,33 @@ public:
 
             Chord c69 { 0, ChordQuality::Sixth };
             c69.addMask = AddNine;
-            expectEquals (ChordModel::chordName (c69), juce::String ("C69"));
+            expectEquals (ChordModel::chordName (c69), juce::String ("C(6,9)"));
+
+            Chord cm69 { 0, ChordQuality::Minor6 };
+            cm69.addMask = AddNine;
+            expectEquals (ChordModel::chordName (cm69), juce::String ("Cm(6,9)"));
+
+            expectEquals (ChordModel::chordName ({ 0, ChordQuality::SixthSus4 }), juce::String ("C6sus4"));
+
+            Chord c6sus4add9 { 0, ChordQuality::SixthSus4 };
+            c6sus4add9.addMask = AddNine;
+            expectEquals (ChordModel::chordName (c6sus4add9), juce::String ("Csus4(6,9)"));
+
+            Chord c7_9_13 { 0, ChordQuality::Dominant7 };
+            c7_9_13.addMask = AddNine | AddThirteen;
+            expectEquals (ChordModel::chordName (c7_9_13), juce::String ("C7(9,13)"));
 
             Chord c13 { 0, ChordQuality::Dominant7 };
-            c13.addMask = AddNine | AddThirteen;
+            c13.addMask = AddNine | AddEleven | AddThirteen;
             expectEquals (ChordModel::chordName (c13), juce::String ("C13"));
+
+            Chord cM13 { 0, ChordQuality::Major7 };
+            cM13.addMask = AddNine | AddEleven | AddThirteen;
+            expectEquals (ChordModel::chordName (cM13), juce::String ("CM13"));
+
+            Chord cm13 { 0, ChordQuality::Minor7 };
+            cm13.addMask = AddNine | AddEleven | AddThirteen;
+            expectEquals (ChordModel::chordName (cm13), juce::String ("Cm13"));
 
             Chord c7b913 { 0, ChordQuality::Dominant7 };
             c7b913.addMask = AddFlat9 | AddThirteen;
@@ -160,6 +183,12 @@ public:
                 const auto a = ChordModel::optionAvailability ({ 0, ChordQuality::Sixth });
                 expect (! a.add[6]); // 13 collides with 6
                 expect (! a.omit7);
+            }
+            {
+                const auto a = ChordModel::optionAvailability ({ 0, ChordQuality::SixthSus4 });
+                expect (! a.add[3]); // 11 collides with sus4
+                expect (! a.add[6]); // 13 collides with 6
+                expect (! a.omit3);
             }
             {
                 const auto a = ChordModel::optionAvailability ({ 0, ChordQuality::Power5 });
