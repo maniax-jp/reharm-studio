@@ -101,6 +101,10 @@ public:
             c13.addMask = AddNine | AddEleven | AddThirteen;
             expectEquals (ChordModel::chordName (c13), juce::String ("C13"));
 
+            Chord cM11 { 0, ChordQuality::Major7 };
+            cM11.addMask = AddNine | AddEleven;
+            expectEquals (ChordModel::chordName (cM11), juce::String ("CM11"));
+
             Chord cM13 { 0, ChordQuality::Major7 };
             cM13.addMask = AddNine | AddEleven | AddThirteen;
             expectEquals (ChordModel::chordName (cM13), juce::String ("CM13"));

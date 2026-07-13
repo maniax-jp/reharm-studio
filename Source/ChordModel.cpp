@@ -183,6 +183,7 @@ juce::String commonNameSuffix (ChordQuality q, int addMask)
         switch (q)
         {
             case ChordQuality::Dominant7: return "11";
+            case ChordQuality::Major7:    return "M11";
             case ChordQuality::Minor7:    return "m11";
             default: break;
         }
