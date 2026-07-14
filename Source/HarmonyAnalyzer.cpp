@@ -53,6 +53,21 @@ bool isRelatedTwoQuality (ChordQuality q) noexcept
         || q == ChordQuality::Minor7Flat5;
 }
 
+// Preset matching treats maj/M7 and m/m7 as interchangeable.
+ChordQuality presetCanonicalQuality (ChordQuality q) noexcept
+{
+    if (q == ChordQuality::Major7)
+        return ChordQuality::Major;
+    if (q == ChordQuality::Minor7)
+        return ChordQuality::Minor;
+    return q;
+}
+
+bool qualityMatchesPreset (ChordQuality actual, ChordQuality expected) noexcept
+{
+    return presetCanonicalQuality (actual) == presetCanonicalQuality (expected);
+}
+
 struct RealChord
 {
     int flatIndex = 0;
@@ -576,7 +591,7 @@ std::vector<DetectedPattern> HarmonyAnalyzer::detectPatterns (const ProgressionM
                     const auto& chord = real[static_cast<size_t> (s + k)].chord;
                     const auto& entry = preset.entries[static_cast<size_t> (k)];
                     if (presetRootOffset (chord, key) != entry.degreeSemitone
-                        || chord.quality != entry.quality)
+                        || ! qualityMatchesPreset (chord.quality, entry.quality))
                     {
                         match = false;
                         break;
