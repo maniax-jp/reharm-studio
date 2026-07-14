@@ -283,6 +283,77 @@ public:
             expect (found);
         }
 
+        beginTest ("detectPatterns: Royal Road triad form (maj/m as M7/m7)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            // F - G7 - Em - Am (triad form of Royal Road)
+            model.setChord (0, 0, Chord { 5, ChordQuality::Major,      -1 });
+            model.setChord (1, 0, Chord { 7, ChordQuality::Dominant7,  -1 });
+            model.setChord (2, 0, Chord { 4, ChordQuality::Minor,      -1 });
+            model.setChord (3, 0, Chord { 9, ChordQuality::Minor,      -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Royal Road (IV-V-iii-vi)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found, "Royal Road triad form should match via maj/m <-> M7/m7");
+        }
+
+        beginTest ("detectPatterns: Royal Road all-seventh form (vi as m7)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            // FM7 - G7 - Em7 - Am7 (vi as Minor7; bidirectional quality match)
+            model.setChord (0, 0, Chord { 5, ChordQuality::Major7,    -1 });
+            model.setChord (1, 0, Chord { 7, ChordQuality::Dominant7, -1 });
+            model.setChord (2, 0, Chord { 4, ChordQuality::Minor7,    -1 });
+            model.setChord (3, 0, Chord { 9, ChordQuality::Minor7,    -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Royal Road (IV-V-iii-vi)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found, "Royal Road with Am7 should match (m7 <-> m)");
+        }
+
+        beginTest ("detectPatterns: Royal Road rejects Dominant7 on iii");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            // F - G7 - E7 - Am (iii as Dominant7 must not match Minor/Minor7)
+            model.setChord (0, 0, Chord { 5, ChordQuality::Major,      -1 });
+            model.setChord (1, 0, Chord { 7, ChordQuality::Dominant7,  -1 });
+            model.setChord (2, 0, Chord { 4, ChordQuality::Dominant7,  -1 });
+            model.setChord (3, 0, Chord { 9, ChordQuality::Minor,      -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Royal Road (IV-V-iii-vi)")
+                    found = true;
+            }
+            expect (! found, "Dominant7 on iii must not match Royal Road");
+        }
+
         beginTest ("substitutions: C Major dairi and G7 ura");
         {
             const Chord cMajorChord { 0, ChordQuality::Major, -1 };
