@@ -65,7 +65,18 @@ ChordQuality presetCanonicalQuality (ChordQuality q) noexcept
 
 bool qualityMatchesPreset (ChordQuality actual, ChordQuality expected) noexcept
 {
-    return presetCanonicalQuality (actual) == presetCanonicalQuality (expected);
+    if (presetCanonicalQuality (actual) == presetCanonicalQuality (expected))
+        return true;
+
+    // Directional relaxations: a preset 7th slot may be played as a plain
+    // major triad, and a preset m7b5 slot as a diminished triad. The reverse
+    // (preset maj matched by an actual 7th) must NOT hold.
+    if (expected == ChordQuality::Dominant7 && actual == ChordQuality::Major)
+        return true;
+    if (expected == ChordQuality::Minor7Flat5 && actual == ChordQuality::Diminished)
+        return true;
+
+    return false;
 }
 
 struct RealChord

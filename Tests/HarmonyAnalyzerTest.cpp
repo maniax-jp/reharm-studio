@@ -354,6 +354,106 @@ public:
             expect (! found, "Dominant7 on iii must not match Royal Road");
         }
 
+        beginTest ("detectPatterns: Royal Road V7 slot as Major triad");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            // F - G - Em - Am (preset Dominant7 may be played as Major)
+            model.setChord (0, 0, Chord { 5, ChordQuality::Major, -1 });
+            model.setChord (1, 0, Chord { 7, ChordQuality::Major, -1 });
+            model.setChord (2, 0, Chord { 4, ChordQuality::Minor, -1 });
+            model.setChord (3, 0, Chord { 9, ChordQuality::Minor, -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Royal Road (IV-V-iii-vi)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found, "Royal Road V7 slot played as Major should match");
+        }
+
+        beginTest ("detectPatterns: Autumn Leaves m7b5 slot as Diminished");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (8);
+            // Dm7 - G7 - CM7 - FM7 - Bdim - E7 - Am7 - Am7
+            model.setChord (0, 0, Chord { 2,  ChordQuality::Minor7,      -1 });
+            model.setChord (1, 0, Chord { 7,  ChordQuality::Dominant7,   -1 });
+            model.setChord (2, 0, Chord { 0,  ChordQuality::Major7,      -1 });
+            model.setChord (3, 0, Chord { 5,  ChordQuality::Major7,      -1 });
+            model.setChord (4, 0, Chord { 11, ChordQuality::Diminished,   -1 });
+            model.setChord (5, 0, Chord { 4,  ChordQuality::Dominant7,   -1 });
+            model.setChord (6, 0, Chord { 9,  ChordQuality::Minor7,      -1 });
+            model.setChord (7, 0, Chord { 9,  ChordQuality::Minor7,      -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Autumn Leaves (ii-V-I-IV-vii-III7-vi)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 7);
+                }
+            }
+            expect (found, "Autumn Leaves m7b5 slot played as dim should match");
+        }
+
+        beginTest ("detectPatterns: Canon rejects Dominant7 on I (no reverse)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (8);
+            // C7 - G - Am - Em - F - C - F - G (I as Dominant7 must not match Major)
+            model.setChord (0, 0, Chord { 0, ChordQuality::Dominant7, -1 });
+            model.setChord (1, 0, Chord { 7, ChordQuality::Major,     -1 });
+            model.setChord (2, 0, Chord { 9, ChordQuality::Minor,     -1 });
+            model.setChord (3, 0, Chord { 4, ChordQuality::Minor,     -1 });
+            model.setChord (4, 0, Chord { 5, ChordQuality::Major,     -1 });
+            model.setChord (5, 0, Chord { 0, ChordQuality::Major,     -1 });
+            model.setChord (6, 0, Chord { 5, ChordQuality::Major,     -1 });
+            model.setChord (7, 0, Chord { 7, ChordQuality::Major,     -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Canon (I-V-vi-iii-IV-I-IV-V)")
+                    found = true;
+            }
+            expect (! found, "Canon I as Dominant7 must not match (no reverse)");
+        }
+
+        beginTest ("detectPatterns: Royal Road rejects Major7 on V7 slot");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            // F - GM7 - Em - Am (Major7 must not match preset Dominant7)
+            model.setChord (0, 0, Chord { 5, ChordQuality::Major,   -1 });
+            model.setChord (1, 0, Chord { 7, ChordQuality::Major7,  -1 });
+            model.setChord (2, 0, Chord { 4, ChordQuality::Minor,   -1 });
+            model.setChord (3, 0, Chord { 9, ChordQuality::Minor,   -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Royal Road (IV-V-iii-vi)")
+                    found = true;
+            }
+            expect (! found, "Major7 on V7 slot must not match Royal Road");
+        }
+
         beginTest ("substitutions: C Major dairi and G7 ura");
         {
             const Chord cMajorChord { 0, ChordQuality::Major, -1 };
