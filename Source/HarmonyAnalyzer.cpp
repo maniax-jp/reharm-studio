@@ -165,14 +165,20 @@ bool matchesSecondaryDominant (const Chord& c,
     if (! isDominantQuality (c.quality) || ! next.has_value())
         return false;
 
-    if (normalizePc (c.rootPitchClass + 5) != normalizePc (next->rootPitchClass))
-        return false;
+    // Case A: resolve down a perfect fifth (not to tonic).
+    if (normalizePc (c.rootPitchClass + 5) == normalizePc (next->rootPitchClass)
+        && rootOffset (*next, key) != 0)
+        return true;
 
-    // Resolving to tonic is not treated as secondary dominant.
-    if (rootOffset (*next, key) == 0)
-        return false;
+    // Case B: III7 -> IV (deceptive resolution).
+    if (rootOffset (c, key) == 4 && rootOffset (*next, key) == 5)
+        return true;
 
-    return true;
+    // Case C: VI7 -> IV (deceptive resolution).
+    if (rootOffset (c, key) == 9 && rootOffset (*next, key) == 5)
+        return true;
+
+    return false;
 }
 
 bool matchesTritoneSubstitution (const Chord& c,
@@ -247,7 +253,8 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     // 4. Secondary Dominant
     if (matchesSecondaryDominant (c, next, key))
     {
-        const juce::String roman = ChordModel::degreeRoman (next->rootPitchClass, key);
+        // Roman numeral is the target degree of V7/x (root + perfect fifth).
+        const juce::String roman = ChordModel::degreeRoman (c.rootPitchClass + 5, key);
         return { false, NonDiatonicTechnique::SecondaryDominant,
                  "Sec.Dom (V7/" + roman + ")", {} };
     }

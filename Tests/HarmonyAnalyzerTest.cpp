@@ -57,6 +57,64 @@ public:
             expect (analysis[0].label.contains ("V7/II"));
         }
 
+        beginTest ("SecondaryDominant: E7 to FM7 (III7 -> IV)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major7,    -1 }); // FM7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/VI)"));
+        }
+
+        beginTest ("SecondaryDominant: A7 to FM7 (VI7 -> IV)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major7,    -1 }); // FM7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/II)"));
+        }
+
+        beginTest ("SecondaryDominant: E7 to Am7 (fifth resolution regression)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor7,    -1 }); // Am7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/VI)"));
+        }
+
+        beginTest ("SecondaryDominant: E7 to G7 is not Sec.Dom");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (1, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (analysis[0].technique != NonDiatonicTechnique::SecondaryDominant);
+        }
+
         beginTest ("DoubleDominant: D7 in C major");
         {
             ProgressionModel model;
