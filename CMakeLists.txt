@@ -38,6 +38,8 @@ endfunction()
 # ============================================================================
 juce_add_gui_app(ReharmStudio
     PRODUCT_NAME "Reharm Studio"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Assets/AppIcon_1024.png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/Assets/AppIcon_64.png"
 )
 
 juce_generate_juce_header(ReharmStudio)

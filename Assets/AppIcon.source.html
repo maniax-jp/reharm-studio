@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  #stage { width: 1024px; height: 1024px; }
+</style>
+</head>
+<body>
+<div id="stage">
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#242b3a"/>
+      <stop offset="0.55" stop-color="#161a22"/>
+      <stop offset="1" stop-color="#0e1014"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8f7fff"/>
+      <stop offset="1" stop-color="#6b59f0"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5df0ca"/>
+      <stop offset="1" stop-color="#2fc9a2"/>
+    </linearGradient>
+    <filter id="glowP" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="26" flood-color="#7c6cff" flood-opacity="0.45"/>
+    </filter>
+    <filter id="glowT" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="26" flood-color="#41e0b8" flood-opacity="0.5"/>
+    </filter>
+    <!-- macOS-style squircle (approximated superellipse) -->
+    <path id="squircle" d="M 512 96
+      L 690 96 C 830 96 928 194 928 334
+      L 928 690 C 928 830 830 928 690 928
+      L 334 928 C 194 928 96 830 96 690
+      L 96 334 C 96 194 194 96 334 96 Z"/>
+    <clipPath id="clip"><use href="#squircle"/></clipPath>
+  </defs>
+
+  <use href="#squircle" fill="url(#bg)"/>
+
+  <g clip-path="url(#clip)">
+    <!-- faint staff lines for musical context -->
+    <g stroke="#e8eaf0" stroke-opacity="0.06" stroke-width="8">
+      <line x1="96" y1="352" x2="928" y2="352"/>
+      <line x1="96" y1="512" x2="928" y2="512"/>
+      <line x1="96" y1="672" x2="928" y2="672"/>
+    </g>
+
+    <!-- chord voicing as piano-roll bars: top & bottom stay, middle note "reharmonized" (shifted) -->
+    <g>
+      <rect x="232" y="300" width="440" height="104" rx="52" fill="url(#purple)" filter="url(#glowP)"/>
+      <rect x="352" y="460" width="440" height="104" rx="52" fill="url(#teal)" filter="url(#glowT)"/>
+      <rect x="232" y="620" width="440" height="104" rx="52" fill="url(#purple)" filter="url(#glowP)"/>
+    </g>
+
+    <!-- small alteration dot (non-diatonic accent) -->
+    <circle cx="792" cy="352" r="46" fill="#ffb454"/>
+  </g>
+
+  <!-- inner rim highlight -->
+  <use href="#squircle" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="6"/>
+</svg>
+</div>
+</body>
+</html>
