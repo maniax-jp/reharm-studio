@@ -14,8 +14,27 @@ env:
   PRODUCT_NAME: Reharm Studio
 
 jobs:
+  test:
+    name: Unit Tests (macOS)
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure and Build (debug-tests)
+        run: |
+          cmake --preset debug-tests
+          cmake --build --preset debug-tests --target ReharmStudioTests
+
+      - name: Run unit tests
+        run: |
+          "build/ReharmStudioTests_artefacts/Debug/Reharm Studio Tests.app/Contents/MacOS/Reharm Studio Tests"
+
   build:
     name: Build & Package (macOS)
+    needs: test
     runs-on: macos-latest
     permissions:
       contents: read
@@ -43,6 +62,18 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved version: ${VERSION}"
+
+      - name: Check version consistency (tag vs CMakeLists.txt)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          CMAKE_VERSION="$(sed -nE 's/^project\(ReharmStudio VERSION ([0-9.]+)\)/\1/p' CMakeLists.txt)"
+          if [[ "$TAG_VERSION" != "$CMAKE_VERSION" ]]; then
+            echo "::error::Tag version (${TAG_VERSION}) does not match CMakeLists.txt VERSION (${CMAKE_VERSION})"
+            exit 1
+          fi
+          echo "Version consistency OK: ${TAG_VERSION}"
 
       - name: Install dependencies
         run: |

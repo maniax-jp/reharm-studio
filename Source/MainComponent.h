@@ -5,6 +5,7 @@
 #include "ProgressionModel.h"
 #include "HarmonyAnalyzer.h"
 #include "Theme.h"
+#include "DisplayState.h"
 #include "HeaderBar.h"
 #include "SequencerView.h"
 #include "AnalysisStrip.h"

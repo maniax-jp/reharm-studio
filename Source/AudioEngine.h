@@ -211,6 +211,7 @@ private:
     std::atomic<int> mBpm { 120 };
     std::atomic<float> mVolume { 0.8f };
     std::atomic<bool> mIsPlaying { false };
+    std::atomic<bool> mStartRequested { false };
     std::atomic<bool> mStopRequested { false };
     std::atomic<bool> mLoadingPlugin { false };
 

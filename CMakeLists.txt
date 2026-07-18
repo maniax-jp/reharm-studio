@@ -20,6 +20,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
+# Common compile definitions shared by all targets.
+function(reharm_apply_common_definitions target)
+    target_compile_definitions(${target} PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
+        JUCE_PLUGINHOST_VST3=1
+    )
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        target_compile_definitions(${target} PRIVATE REHARM_DEBUG_LOG=1)
+    endif()
+endfunction()
+
 # ============================================================================
 # Main App (always built)
 # ============================================================================
@@ -44,15 +57,7 @@ target_sources(ReharmStudio PRIVATE
     Source/TransportBar.cpp
 )
 
-target_compile_definitions(ReharmStudio PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_PLUGINHOST_VST3=1
-)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    target_compile_definitions(ReharmStudio PRIVATE REHARM_DEBUG_LOG=1)
-endif()
+reharm_apply_common_definitions(ReharmStudio)
 
 target_link_libraries(ReharmStudio PRIVATE
     juce::juce_audio_basics
@@ -101,15 +106,7 @@ target_sources(ReharmStudioTests PRIVATE
     Source/TransportBar.cpp
 )
 
-target_compile_definitions(ReharmStudioTests PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_PLUGINHOST_VST3=1
-)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    target_compile_definitions(ReharmStudioTests PRIVATE REHARM_DEBUG_LOG=1)
-endif()
+reharm_apply_common_definitions(ReharmStudioTests)
 
 target_link_libraries(ReharmStudioTests PRIVATE
     juce::juce_core
@@ -139,15 +136,7 @@ target_sources(PluginLoadTest PRIVATE
     Experiments/PluginLoadTest.cpp
 )
 
-target_compile_definitions(PluginLoadTest PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_PLUGINHOST_VST3=1
-)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    target_compile_definitions(PluginLoadTest PRIVATE REHARM_DEBUG_LOG=1)
-endif()
+reharm_apply_common_definitions(PluginLoadTest)
 
 target_link_libraries(PluginLoadTest PRIVATE
     juce::juce_audio_basics
@@ -170,16 +159,10 @@ target_sources(PresetSwitchTest PRIVATE
     Experiments/PresetSwitchTest.cpp
 )
 
+reharm_apply_common_definitions(PresetSwitchTest)
 target_compile_definitions(PresetSwitchTest PRIVATE
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_PLUGINHOST_VST3=1
     JUCE_MODAL_LOOPS_PERMITTED=1
 )
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    target_compile_definitions(PresetSwitchTest PRIVATE REHARM_DEBUG_LOG=1)
-endif()
 
 target_link_libraries(PresetSwitchTest PRIVATE
     juce::juce_audio_basics
