@@ -62,6 +62,23 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
     // Capture a local reference to the current chord data
     auto chordData = std::atomic_load(&mCurrentChordData);
 
+    // Handle a (re)start request on the audio thread so playback-state fields
+    // are only ever written here. Sends note-offs for anything still sounding
+    // from a previous run before resetting.
+    if (mIsPlaying.load() && mStartRequested.exchange(false))
+    {
+        for (int i = 0; i < mNumSoundingNotes; ++i)
+            midiMessages.addEvent(juce::MidiMessage::noteOff(1, mSoundingNotes[i]), 0);
+        mNumSoundingNotes = 0;
+        std::atomic_store(&mStopRequested, false);
+        mCurrentChordIndex = 0;
+        mCurrentBeatPosition = 0.0;
+        mFirstBlock = true;
+        mActiveChordDataPtr = chordData.get();
+        mPlayHead.samples = 0;
+        mPlayHead.ppq = 0.0;
+    }
+
     // Block-start beat position for the playhead (capture before advancing).
     const double blockStartPpq = mCurrentBeatPosition;
 
@@ -399,20 +416,16 @@ void AudioEngine::setChordData(std::shared_ptr<ChordData> newData)
 
 void AudioEngine::startPlayback()
 {
-    mCurrentChordIndex = 0;
-    mCurrentBeatPosition = 0.0;
-    mPlayHead.samples = 0;
-    mPlayHead.ppq = 0.0;
-    mFirstBlock = true;
+    // Actual state reset happens on the audio thread (see processBlock) so
+    // message-thread writes never race with audio-thread-only fields.
     mPlayingSlotShared.store(0, std::memory_order_relaxed);
-    mNumSoundingNotes = 0;
-    mActiveChordDataPtr = std::atomic_load(&mCurrentChordData).get();
+    std::atomic_store(&mStartRequested, true);
     std::atomic_store(&mIsPlaying, true);
 }
 
 void AudioEngine::stopPlayback()
 {
+    std::atomic_store(&mStartRequested, false);
     std::atomic_store(&mStopRequested, true);
     std::atomic_store(&mIsPlaying, false);
-    mFirstBlock = false;
 }

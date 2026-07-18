@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "Theme.h"
+#include "DisplayState.h"
 #include "ProgressionModel.h"
 #include "HarmonyAnalyzer.h"
 
