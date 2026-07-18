@@ -106,8 +106,43 @@ MainComponent::MainComponent()
     refreshAnalysis();
     updateEditorVisibility();
 
+    // Keep keyboard focus on this component so the space bar always toggles
+    // playback: child controls must not steal focus when clicked.
+    setWantsKeyboardFocus (true);
+    std::function<void (juce::Component&)> disableClickFocus =
+        [&disableClickFocus] (juce::Component& comp)
+    {
+        comp.setMouseClickGrabsKeyboardFocus (false);
+        for (auto* child : comp.getChildren())
+            disableClickFocus (*child);
+    };
+    disableClickFocus (*this);
+
     setAudioChannels (0, 2);
     startTimer (50);
+}
+
+bool MainComponent::keyPressed (const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress (juce::KeyPress::spaceKey))
+    {
+        togglePlayback();
+        return true;
+    }
+    return false;
+}
+
+// KeyListener callback: registered on the top-level window so the space bar
+// works even when no component inside the window has keyboard focus.
+bool MainComponent::keyPressed (const juce::KeyPress& key, juce::Component*)
+{
+    return keyPressed (key);
+}
+
+void MainComponent::visibilityChanged()
+{
+    if (isShowing())
+        grabKeyboardFocus();
 }
 
 MainComponent::~MainComponent()

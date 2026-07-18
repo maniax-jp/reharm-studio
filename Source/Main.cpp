@@ -39,7 +39,12 @@ public:
                               DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar (true);
-            setContentOwned (new MainComponent(), true);
+            auto* content = new MainComponent();
+            setContentOwned (content, true);
+
+            // Key events land on the window itself when nothing has focus;
+            // forward them to the content so the space bar toggles playback.
+            addKeyListener (content);
 
            #if JUCE_IOS || JUCE_ANDROID
             setFullScreen (true);

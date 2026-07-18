@@ -33,7 +33,8 @@ public:
 };
 
 class MainComponent : public juce::AudioAppComponent,
-                      public juce::Timer
+                      public juce::Timer,
+                      public juce::KeyListener
 {
 public:
     MainComponent();
@@ -45,6 +46,9 @@ public:
 
     void paint (juce::Graphics& g) override;
     void resized() override;
+    bool keyPressed (const juce::KeyPress& key) override;
+    bool keyPressed (const juce::KeyPress& key, juce::Component* origin) override;
+    void visibilityChanged() override;
 
     void timerCallback() override;
     void markPluginAsReady();
