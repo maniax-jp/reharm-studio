@@ -14,6 +14,7 @@ struct ChordData
 {
     std::vector<std::vector<int>> notes;
     std::vector<double> beats;
+    std::vector<double> cumBeats;  // ビートごとの累積位置（構築時に事前計算）
     int totalChords = 0;
     double totalBeats = 0.0;
 
@@ -29,6 +30,12 @@ struct ChordData
             beats.push_back(4.0);
         }
         totalBeats = (double) totalChords * 4.0;
+
+        // 累積ビート位置を計算（A1）
+        cumBeats.reserve(static_cast<size_t>(totalChords) + 1);
+        cumBeats.push_back(0.0);
+        for (int i = 0; i < totalChords; ++i)
+            cumBeats.push_back(cumBeats.back() + beats[i]);
     }
 
     // New constructor with explicit per-slot durations.
@@ -37,10 +44,19 @@ struct ChordData
         jassert(newNotes.size() == newBeats.size());
         const auto sz = std::min(newNotes.size(), newBeats.size());
         notes.assign(newNotes.begin(), newNotes.begin() + sz);
-        beats.assign(newBeats.begin(), newBeats.begin() + sz);
+        // beats <= 0 を 0.01 にクランプ（A3: ビート0/負値ガード）
+        for (size_t i = 0; i < sz; ++i)
+            beats.push_back(std::max(newBeats[i], 0.01));
         totalChords = static_cast<int>(sz);
+        totalBeats = 0.0;
         for (double b : beats)
             totalBeats += b;
+
+        // 累積ビート位置を計算（A1）
+        cumBeats.reserve(static_cast<size_t>(totalChords) + 1);
+        cumBeats.push_back(0.0);
+        for (int i = 0; i < totalChords; ++i)
+            cumBeats.push_back(cumBeats.back() + beats[i]);
     }
 };
 
@@ -92,7 +108,6 @@ public:
     // Control methods
     juce::AudioPluginInstance* getPluginInstance() const { return mPluginInstance.get(); }
     void setPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin);
-    void loadPlugin(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize);
     void setPluginReady(bool ready) { std::atomic_store(&mPluginReady, ready); }
     void setBpm(int newBpm);
     void setVolume(float newVolume);
@@ -225,13 +240,15 @@ private:
     bool mFirstBlock = false;
 
     // Audio-thread-only tracking of currently sounding notes.
-    static constexpr int kMaxSoundingNotes = 16;
+    static constexpr int kMaxSoundingNotes = 32;  // A7: 16→32
     int mSoundingNotes[kMaxSoundingNotes] = {};
     int mNumSoundingNotes = 0;
     const void* mActiveChordDataPtr = nullptr; // last seen ChordData address
 
     // Fallback triangle-wave synthesiser (used when no VST plugin is loaded).
     juce::Synthesiser mFallbackSynth;
+
+    friend class AudioEngineTest;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioEngine)
 };

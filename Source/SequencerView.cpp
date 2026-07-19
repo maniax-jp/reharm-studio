@@ -9,7 +9,7 @@ SequencerView::SequencerView()
 void SequencerView::setModel (reharm::ProgressionModel* m)
 {
     model = m;
-    recomputeLayout();
+    layoutDirty = true;
     repaint();
 }
 
@@ -109,7 +109,7 @@ void SequencerView::recomputeLayout()
 
 void SequencerView::resized()
 {
-    recomputeLayout();
+    layoutDirty = true;
 }
 
 void SequencerView::paint (juce::Graphics& g)
@@ -119,7 +119,11 @@ void SequencerView::paint (juce::Graphics& g)
     if (model == nullptr)
         return;
 
-    recomputeLayout();
+    if (layoutDirty)
+    {
+        recomputeLayout();
+        layoutDirty = false;
+    }
 
     const int numBars = model->getNumBars();
 
@@ -342,6 +346,12 @@ void SequencerView::hitTest (juce::Point<int> pos)
 {
     if (model == nullptr)
         return;
+
+    if (layoutDirty)
+    {
+        recomputeLayout();
+        layoutDirty = false;
+    }
 
     const int numBars = model->getNumBars();
 

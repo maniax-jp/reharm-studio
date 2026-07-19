@@ -20,6 +20,9 @@ public:
     void setAnalyses (const std::vector<reharm::ChordAnalysis>& analyses);
     void setPlayingFlatIndex (int flatIndex);
 
+    /** Mark layout bounds dirty; recomputed lazily on next paint. */
+    void markLayoutDirty() noexcept { layoutDirty = true; }
+
     /** Fired when a cell is clicked (after empty-cell default chord placement if needed). */
     std::function<void (int bar, int slot)> onCellSelected;
 
@@ -32,6 +35,7 @@ private:
     DisplayState* display = nullptr;
     std::vector<reharm::ChordAnalysis> analyses;
     int playingFlatIndex = -1;
+    bool layoutDirty = true;
 
     static constexpr int kMaxBars = reharm::ProgressionModel::maxBars;
     static constexpr int kCols = 4;

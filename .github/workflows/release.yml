@@ -23,6 +23,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Cache JUCE (FetchContent)
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-8.0.14-${{ runner.os }}-fetchcontent
+          restore-keys: |
+            juce-8.0.14-${{ runner.os }}-
+
       - name: Configure and Build (debug-tests)
         run: |
           cmake --preset debug-tests
@@ -30,7 +38,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          "build/ReharmStudioTests_artefacts/Debug/Reharm Studio Tests.app/Contents/MacOS/Reharm Studio Tests"
+          "build/ReharmStudioTests_artefacts/Debug/ReharmStudioTests"
 
   build:
     name: Build & Package (macOS)
@@ -46,6 +54,14 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Cache JUCE (FetchContent)
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-8.0.14-${{ runner.os }}-fetchcontent
+          restore-keys: |
+            juce-8.0.14-${{ runner.os }}-
 
       - name: Compute version
         id: version

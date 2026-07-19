@@ -124,6 +124,83 @@ public:
             expectEquals (counter, 2);
         }
 
+        beginTest ("bulk edit: onChanged fires once after endBulkEdit");
+        {
+            ProgressionModel model;
+            int counter = 0;
+            model.onChanged = [&counter] { ++counter; };
+
+            {
+                ProgressionModel::ScopedBulkEdit bulk (model);
+                model.setNumBars (4);
+                model.clear();
+                model.setSubdivision (0, BarSubdivision::One);
+                model.setChord (0, 0, Chord {0, ChordQuality::Major, -1});
+                model.setChord (1, 0, Chord {5, ChordQuality::Major, -1});
+                model.setChord (2, 0, Chord {7, ChordQuality::Dominant7, -1});
+                model.setChord (3, 0, Chord {9, ChordQuality::Minor, -1});
+                expectEquals (counter, 0); // suppressed while bulk editing
+            }
+
+            expectEquals (counter, 1); // single notification after scope ends
+        }
+
+        beginTest ("bulk edit: nested scopes still fire once");
+        {
+            ProgressionModel model;
+            int counter = 0;
+            model.onChanged = [&counter] { ++counter; };
+
+            model.beginBulkEdit();
+            model.beginBulkEdit();
+            model.setChord (0, 0, Chord {0, ChordQuality::Major, -1});
+            model.endBulkEdit();
+            expectEquals (counter, 0);
+            model.endBulkEdit();
+            expectEquals (counter, 1);
+        }
+
+        beginTest ("bulk edit: no notification when nothing changed");
+        {
+            ProgressionModel model;
+            int counter = 0;
+            model.onChanged = [&counter] { ++counter; };
+
+            {
+                ProgressionModel::ScopedBulkEdit bulk (model);
+                // no mutations
+            }
+
+            expectEquals (counter, 0);
+        }
+
+        beginTest ("applyToModel fires onChanged exactly once");
+        {
+            ProgressionModel model;
+            int counter = 0;
+            model.onChanged = [&counter] { ++counter; };
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [0], model);
+            expectEquals (counter, 1);
+        }
+
+        beginTest ("getBar/getSubdivision out-of-range is Release-safe");
+        {
+            ProgressionModel model;
+            model.setSubdivision (0, BarSubdivision::Four);
+
+            // getBar clamps to [0, maxBars-1]: -1 -> 0 (Four), 100 -> maxBars-1 (default One)
+            expectEquals (model.getBar (-1).numSlots(), 4);
+            expectEquals (model.getBar (0).numSlots(), 4);
+            expectEquals (model.getBar (100).numSlots(), 1);
+
+            // getSubdivision clamps to active bar range [0, numBars-1]
+            expect (model.getSubdivision (-1) == BarSubdivision::Four); // clamps to 0
+            expect (model.getSubdivision (0) == BarSubdivision::Four);
+            expect (model.getSubdivision (100) == BarSubdivision::One); // clamps to numBars-1
+        }
+
         beginTest ("onChanged nullptr does not crash");
         {
             ProgressionModel model;
@@ -132,6 +209,10 @@ public:
             model.setNumBars (2);
             model.clear();
             model.setKey ({2, false});
+            {
+                ProgressionModel::ScopedBulkEdit bulk (model);
+                model.clear();
+            }
             // No crash = pass
             expect (true);
         }

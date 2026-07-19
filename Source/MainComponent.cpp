@@ -1,5 +1,4 @@
 #include "MainComponent.h"
-#include <dlfcn.h>
 #include <fstream>
 
 static void debugLog (const juce::String& msg)
@@ -14,17 +13,6 @@ static void debugLog (const juce::String& msg)
     juce::Logger::writeToLog (msg);
 #endif
 }
-
-// CoreAudio types (minimal definitions to avoid header conflicts)
-typedef uint32_t UInt32;
-typedef uint64_t AudioObjectID;
-typedef int32_t AudioObjectPropertyStatus;
-typedef struct AudioObjectPropertyAddress {
-    UInt32 mSelector;
-    UInt32 mScope;
-    UInt32 mElement;
-} AudioObjectPropertyAddress;
-typedef AudioObjectID AudioDeviceID;
 
 //==============================================================================
 MainComponent::MainComponent()
@@ -162,7 +150,13 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
     juce::MidiBuffer midiBuffer;
-    audioEngine->processBlock (*bufferToFill.buffer, midiBuffer);
+
+    // Honour startSample/numSamples: process only the requested region.
+    juce::AudioBuffer<float> subBuffer (bufferToFill.buffer->getArrayOfWritePointers(),
+                                        bufferToFill.buffer->getNumChannels(),
+                                        bufferToFill.startSample,
+                                        bufferToFill.numSamples);
+    audioEngine->processBlock (subBuffer, midiBuffer);
 }
 
 void MainComponent::releaseResources()
@@ -200,6 +194,7 @@ void MainComponent::updateEditorVisibility()
 
 void MainComponent::handleModelChanged()
 {
+    sequencerView.markLayoutDirty();
     sequencerView.repaint();
     refreshAnalysis();
     chordEditor.refreshFromSelection();
@@ -271,19 +266,6 @@ void MainComponent::togglePlayback()
 
 void MainComponent::timerCallback()
 {
-    // Preserve original plugin-ready polling behaviour
-    if (audioEngine->getPluginInstance() != nullptr)
-    {
-        // Mark ready once instance exists (original stopped the timer; we keep it
-        // running for playhead polling and only set ready when needed).
-        static bool marked = false;
-        if (! marked)
-        {
-            audioEngine->setPluginReady (true);
-            marked = true;
-        }
-    }
-
     if (isPlaying)
     {
         const int slot = audioEngine->getCurrentPlayingSlot();
@@ -293,13 +275,6 @@ void MainComponent::timerCallback()
     {
         sequencerView.setPlayingFlatIndex (-1);
     }
-}
-
-void MainComponent::markPluginAsReady()
-{
-    debugLog ("markPluginAsReady: called");
-    audioEngine->setPluginReady (true);
-    debugLog ("markPluginAsReady: plugin ready set");
 }
 
 void MainComponent::openPluginEditor()
@@ -374,11 +349,41 @@ void MainComponent::loadPlugin()
                                                 + ", BS=" + juce::String (blockSize)
                                                 + " (device stays open; load gated via beginPluginLoad)");
 
+                                      // Prefer instrument plugins when multiple descriptions exist.
+                                      const juce::PluginDescription* chosen = nullptr;
+                                      const juce::PluginDescription* fallback = nullptr;
+                                      for (auto* d : descriptions)
+                                          {
+                                              if (d == nullptr)
+                                                  continue;
+
+                                              if (fallback == nullptr)
+                                                  fallback = d;
+
+                                              if (d->isInstrument)
+                                              {
+                                                  chosen = d;
+                                                  break;
+                                              }
+                                          }
+                                      if (chosen == nullptr)
+                                          chosen = fallback;
+
+                                      if (chosen == nullptr)
+                                          {
+                                              debugLog ("No valid plugin description found");
+                                              juce::NativeMessageBox::showMessageBoxAsync (
+                                                  juce::MessageBoxIconType::WarningIcon,
+                                                  "Plugin Load Failed",
+                                                  "No valid plugin description was found in the selected file.");
+                                              return;
+                                          }
+
                                       audioEngine->beginPluginLoad();
 
                                       debugLog ("loadPlugin: calling createInstanceFromDescription...");
                                       juce::String error;
-                                      auto descCopy = *descriptions[0];
+                                      auto descCopy = *chosen;
                                       debugLog ("loadPlugin: desc name=" + descCopy.name);
                                       auto pluginInstance = format.createInstanceFromDescription (descCopy, sampleRate, blockSize, error);
 
@@ -398,11 +403,19 @@ void MainComponent::loadPlugin()
                                       else
                                       {
                                           debugLog ("loadPlugin: createInstanceFromDescription returned nullptr: " + error);
+                                          juce::NativeMessageBox::showMessageBoxAsync (
+                                              juce::MessageBoxIconType::WarningIcon,
+                                              "Plugin Load Failed",
+                                              "Failed to create plugin instance:\n" + error);
                                       }
                                   }
                                   else
                                   {
                                       debugLog ("No valid VST3 plugin found");
+                                      juce::NativeMessageBox::showMessageBoxAsync (
+                                          juce::MessageBoxIconType::WarningIcon,
+                                          "Plugin Load Failed",
+                                          "No valid VST3 plugin was found in the selected file.");
                                   }
                               }
                           });
