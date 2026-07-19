@@ -53,6 +53,41 @@ bool isRelatedTwoQuality (ChordQuality q) noexcept
         || q == ChordQuality::Minor7Flat5;
 }
 
+// If a slash chord can be reinterpreted as a sus-type dominant rooted at its
+// bass note (e.g. Em7/A -> A7sus, F/G -> G9sus), return that bass pitch class.
+// Otherwise nullopt.
+std::optional<int> susDominantReinterpretationRoot (const Chord& c) noexcept
+{
+    if (! c.hasBass())
+        return std::nullopt;
+
+    const int bassRel = normalizePc (c.bassPitchClass - c.rootPitchClass);
+    const bool minorOverFourth = (c.quality == ChordQuality::Minor || c.quality == ChordQuality::Minor7)
+                                  && bassRel == 5;   // Em7/A type
+    const bool majorOverSecond = (c.quality == ChordQuality::Major || c.quality == ChordQuality::Major7)
+                                  && bassRel == 2;   // F/G type
+
+    if (minorOverFourth || majorOverSecond)
+        return normalizePc (c.bassPitchClass);
+
+    return std::nullopt;
+}
+
+// Functional root: the sus-dominant reinterpretation root if present, else the
+// chord's own root.
+int functionalRootPitchClass (const Chord& c) noexcept
+{
+    const auto susRoot = susDominantReinterpretationRoot (c);
+    return susRoot.has_value() ? *susRoot : normalizePc (c.rootPitchClass);
+}
+
+// True if the chord has dominant function, either by quality or by sus
+// reinterpretation of a slash chord.
+bool hasDominantFunction (const Chord& c) noexcept
+{
+    return isDominantQuality (c.quality) || susDominantReinterpretationRoot (c).has_value();
+}
+
 // Preset matching treats maj/M7 and m/m7 as interchangeable.
 ChordQuality presetCanonicalQuality (ChordQuality q) noexcept
 {
@@ -188,20 +223,48 @@ bool matchesSecondaryDominant (const Chord& c,
                                const std::optional<Chord>& next,
                                const KeyContext& key)
 {
-    if (! isDominantQuality (c.quality) || ! next.has_value())
+    if (! hasDominantFunction (c))
         return false;
 
+    const int functionalRoot = functionalRootPitchClass (c);
+
+    // Case D (final chord, no next): assume resolution down a perfect fifth.
+    if (! next.has_value())
+    {
+        const int targetRoot = normalizePc (functionalRoot + 5);
+
+        // Must not resolve to tonic.
+        if (normalizePc (targetRoot - key.tonicPitchClass) == 0)
+            return false;
+
+        // Target must be a diatonic scale degree.
+        static const std::array<int, 7> majorScale = { 0, 2, 4, 5, 7, 9, 11 };
+        static const std::array<int, 7> minorScale = { 0, 2, 3, 5, 7, 8, 10 };
+
+        const int* scale = key.isMajor ? majorScale.data() : minorScale.data();
+
+        for (int i = 0; i < 7; ++i)
+        {
+            if (normalizePc (key.tonicPitchClass + scale[i]) == targetRoot)
+                return true;
+        }
+
+        return false;
+    }
+
+    const int nextFunctionalRoot = functionalRootPitchClass (*next);
+
     // Case A: resolve down a perfect fifth (not to tonic).
-    if (normalizePc (c.rootPitchClass + 5) == normalizePc (next->rootPitchClass)
-        && rootOffset (*next, key) != 0)
+    if (normalizePc (functionalRoot + 5) == nextFunctionalRoot
+        && normalizePc (nextFunctionalRoot - key.tonicPitchClass) != 0)
         return true;
 
     // Case B: III7 -> IV (deceptive resolution).
-    if (rootOffset (c, key) == 4 && rootOffset (*next, key) == 5)
+    if (normalizePc (functionalRoot - key.tonicPitchClass) == 4 && rootOffset (*next, key) == 5)
         return true;
 
     // Case C: VI7 -> IV (deceptive resolution).
-    if (rootOffset (c, key) == 9 && rootOffset (*next, key) == 5)
+    if (normalizePc (functionalRoot - key.tonicPitchClass) == 9 && rootOffset (*next, key) == 5)
         return true;
 
     return false;
@@ -211,15 +274,17 @@ bool matchesTritoneSubstitution (const Chord& c,
                                  const std::optional<Chord>& next,
                                  const KeyContext& key)
 {
-    if (! isDominantQuality (c.quality))
+    if (! hasDominantFunction (c))
         return false;
 
-    if (rootOffset (c, key) == 1)
+    const int functionalRoot = functionalRootPitchClass (c);
+
+    if (normalizePc (functionalRoot - key.tonicPitchClass) == 1)
         return true;
 
     // Half-step descent to next root.
     if (next.has_value()
-        && normalizePc (c.rootPitchClass + 11) == normalizePc (next->rootPitchClass))
+        && normalizePc (functionalRoot + 11) == functionalRootPitchClass (*next))
         return true;
 
     return false;
@@ -279,8 +344,8 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     // 4. Secondary Dominant
     if (matchesSecondaryDominant (c, next, key))
     {
-        // Roman numeral is the target degree of V7/x (root + perfect fifth).
-        const juce::String roman = ChordModel::degreeRoman (c.rootPitchClass + 5, key);
+        // Roman numeral is the target degree of V7/x (functional root + perfect fifth).
+        const juce::String roman = ChordModel::degreeRoman (functionalRootPitchClass (c) + 5, key);
         return { false, NonDiatonicTechnique::SecondaryDominant,
                  "Sec.Dom (V7/" + roman + ")", {} };
     }
@@ -290,6 +355,8 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         return { false, NonDiatonicTechnique::TritoneSubstitution, "Tritone Sub", {} };
 
     // 6. Passing Diminished
+    // Ascending: dim root is a chromatic step above prev and/or below next.
+    // Descending: dim root is a chromatic step above next (prev is ignored).
     if (isDiminishedQuality (c.quality))
     {
         const bool hasPrev = prev.has_value();
@@ -307,13 +374,18 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         else if (hasNext)
             pass = matchNext;
 
+        // Descending: dim root == next root + 1 (requires next; prev irrelevant).
+        const bool matchNextDesc = hasNext
+            && normalizePc (c.rootPitchClass) == normalizePc (next->rootPitchClass + 1);
+        pass = pass || matchNextDesc;
+
         if (pass)
             return { false, NonDiatonicTechnique::PassingDiminished, "Pass.Dim", {} };
     }
 
     // 7. Related II minor (look-ahead: next is Sec.Dom or Tritone Sub)
     if (isRelatedTwoQuality (c.quality) && next.has_value()
-        && normalizePc (c.rootPitchClass + 5) == normalizePc (next->rootPitchClass))
+        && normalizePc (c.rootPitchClass + 5) == functionalRootPitchClass (*next))
     {
         // Classify next with full priority (without depending on this chord's result).
         const ChordAnalysis nextAnalysis = classifyReal (real, realIndex + 1, key);
@@ -571,13 +643,13 @@ std::vector<DetectedPattern> HarmonyAnalyzer::detectPatterns (const ProgressionM
         const auto& a = real[static_cast<size_t> (i)].chord;
         const auto& b = real[static_cast<size_t> (i + 1)].chord;
 
-        if (! isDominantQuality (a.quality))
+        if (! hasDominantFunction (a))
             continue;
 
-        if (isDominantQuality (b.quality))
+        if (hasDominantFunction (b))
             continue;
 
-        const int step = normalizePc (b.rootPitchClass - a.rootPitchClass);
+        const int step = normalizePc (functionalRootPitchClass (b) - functionalRootPitchClass (a));
         if (step != 5 && step != 11)
             continue;
 
