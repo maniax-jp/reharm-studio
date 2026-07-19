@@ -27,10 +27,8 @@ function(reharm_apply_common_definitions target)
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_PLUGINHOST_VST3=1
+        $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:REHARM_DEBUG_LOG=1>
     )
-    if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-        target_compile_definitions(${target} PRIVATE REHARM_DEBUG_LOG=1)
-    endif()
 endfunction()
 
 # ============================================================================
@@ -65,7 +63,6 @@ target_link_libraries(ReharmStudio PRIVATE
     juce::juce_audio_basics
     juce::juce_audio_devices
     juce::juce_audio_formats
-    juce::juce_audio_plugin_client
     juce::juce_audio_processors
     juce::juce_audio_utils
     juce::juce_core
@@ -82,7 +79,7 @@ target_link_libraries(ReharmStudio PRIVATE
 option(BUILD_TESTS "Build the test suite" OFF)
 
 if(BUILD_TESTS)
-juce_add_gui_app(ReharmStudioTests
+juce_add_console_app(ReharmStudioTests
     PRODUCT_NAME "Reharm Studio Tests"
 )
 
@@ -95,17 +92,10 @@ target_sources(ReharmStudioTests PRIVATE
     Tests/ChordModelTest.cpp
     Tests/ProgressionModelTest.cpp
     Tests/HarmonyAnalyzerTest.cpp
-    Source/MainComponent.cpp
     Source/AudioEngine.cpp
     Source/ChordModel.cpp
     Source/ProgressionModel.cpp
     Source/HarmonyAnalyzer.cpp
-    Source/Theme.cpp
-    Source/HeaderBar.cpp
-    Source/SequencerView.cpp
-    Source/AnalysisStrip.cpp
-    Source/ChordEditorPanel.cpp
-    Source/TransportBar.cpp
 )
 
 reharm_apply_common_definitions(ReharmStudioTests)

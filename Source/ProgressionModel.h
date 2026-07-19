@@ -65,6 +65,34 @@ public:
     /** Total number of active slots across all bars. */
     int totalSlots() const noexcept;
 
+    /** Suppress onChanged notifications until matching endBulkEdit().
+        Nested calls are supported; notification fires once when the outermost
+        scope ends if any mutation occurred. */
+    void beginBulkEdit() noexcept;
+    void endBulkEdit();
+
+    /** RAII helper for beginBulkEdit/endBulkEdit. */
+    class ScopedBulkEdit
+    {
+    public:
+        explicit ScopedBulkEdit (ProgressionModel& model) noexcept
+            : m (model)
+        {
+            m.beginBulkEdit();
+        }
+
+        ~ScopedBulkEdit()
+        {
+            m.endBulkEdit();
+        }
+
+        ScopedBulkEdit (const ScopedBulkEdit&) = delete;
+        ScopedBulkEdit& operator= (const ScopedBulkEdit&) = delete;
+
+    private:
+        ProgressionModel& m;
+    };
+
     /** Called after any mutation (setChord/setSubdivision/setNumBars/setKey/clear). */
     std::function<void()> onChanged;
 
@@ -74,6 +102,8 @@ private:
     std::array<Bar, maxBars> bars;
     int numBars = 4;
     KeyContext key;
+    int bulkEditDepth = 0;
+    bool bulkEditDirty = false;
 };
 
 /** A named preset progression, expressed relative to the tonic of a major key. */

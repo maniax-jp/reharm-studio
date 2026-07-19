@@ -1,11 +1,12 @@
 #include "AudioEngine.h"
+#include <array>
 
 AudioEngine::AudioEngine()
 {
     std::atomic_store(&mCurrentChordData, std::make_shared<ChordData>());
 
-    // Register 16 voices and one sound for the fallback triangle synthesiser.
-    for (int i = 0; i < 16; ++i)
+    // Register 32 voices and one sound for the fallback triangle synthesiser.
+    for (int i = 0; i < 32; ++i)
         mFallbackSynth.addVoice (new TriangleVoice());
     mFallbackSynth.addSound (new TriangleSound());
 }
@@ -49,6 +50,13 @@ void AudioEngine::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
 
 void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    // A4: サンプルレート0以下の場合は早期リターン
+    if (mSampleRate <= 0.0)
+    {
+        buffer.clear();
+        return;
+    }
+
     // If loading a plugin, only clear the buffer and return immediately.
     if (std::atomic_load(&mLoadingPlugin))
     {
@@ -96,12 +104,39 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
         double totalBeats = chordData->totalBeats;
         if (totalBeats > 0)
         {
-            // Build cumulative beat positions for variable-length slots.
-            std::vector<double> cumBeats;
-            cumBeats.reserve(static_cast<size_t>(chordData->totalChords) + 1);
-            cumBeats.push_back(0.0);
-            for (int i = 0; i < chordData->totalChords; ++i)
-                cumBeats.push_back(cumBeats.back() + chordData->beats[i]);
+            // A1: 累積ビート配列はChordData内で事前計算済み。参照のみ。
+            // F2: cumBeatsの整合性を確認し、スタックフォールバックの境界をチェック
+            std::array<double, 65> stackCumBeats;
+            const bool hasValidCumBeats = (static_cast<int>(chordData->cumBeats.size()) == chordData->totalChords + 1);
+            bool useStackFallback = false;
+
+            if (!hasValidCumBeats)
+            {
+                // スタックフォールバック: totalChords<=64 かつ beatsが十分にある場合のみ
+                useStackFallback = (chordData->totalChords <= 64
+                                    && static_cast<int>(chordData->beats.size()) >= chordData->totalChords);
+                if (useStackFallback)
+                {
+                    stackCumBeats[0] = 0.0;
+                    for (int i = 0; i < chordData->totalChords; ++i)
+                        stackCumBeats[i + 1] = stackCumBeats[i] + chordData->beats[i];
+                }
+            }
+
+            const double* cumBeats = nullptr;
+            bool hasCumBeatsForTransitions = false;
+
+            if (hasValidCumBeats)
+            {
+                cumBeats = chordData->cumBeats.data();
+                hasCumBeatsForTransitions = true;
+            }
+            else if (useStackFallback)
+            {
+                cumBeats = stackCumBeats.data();
+                hasCumBeatsForTransitions = true;
+            }
+            // else: cumBeatsが利用できない場合は遷移処理をスキップ
 
             // Detect chord data swap: send note-offs for old sounding notes.
             if (chordData.get() != mActiveChordDataPtr && mNumSoundingNotes > 0)
@@ -116,17 +151,20 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
                 if (startBeat < 0) startBeat = 0;
                 endBeat = mCurrentBeatPosition;
 
-                // Find current slot from cumBeats.
-                mCurrentChordIndex = 0;
-                for (int i = 0; i < chordData->totalChords; ++i)
+                // Find current slot from cumBeats (F2: cumBeats==nullptr の場合を回避).
+                if (hasCumBeatsForTransitions)
                 {
-                    if (mCurrentBeatPosition < cumBeats[i + 1])
+                    for (int i = 0; i < chordData->totalChords; ++i)
                     {
+                        if (mCurrentBeatPosition < cumBeats[i + 1])
+                        {
+                            mCurrentChordIndex = i;
+                            break;
+                        }
                         mCurrentChordIndex = i;
-                        break;
                     }
-                    mCurrentChordIndex = i;
                 }
+                // else: cumBeatsが利用できない場合はmCurrentChordIndex=0のままとする
 
                 // Send note-on for the current slot of new data.
                 if (!chordData->notes[mCurrentChordIndex].empty())
@@ -210,61 +248,87 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
             }
 
             // 2. Handle transitions (including loop).
-            while (true)
+            // F4: numSamples<=0のときは遷移処理をスキップ（jlimitの上限が-1になるのを回避）
+            if (numSamples > 0 && hasCumBeatsForTransitions)
             {
-                double nextTransitionBeat = cumBeats[mCurrentChordIndex + 1];
-
-                if (nextTransitionBeat > endBeat)
-                    break;
-
-                if (nextTransitionBeat >= startBeat)
+                // A3: 最大イテレーション上限（totalChords*2 + ブロック内遷移数の見積もり）
+                const int maxIterations = chordData->totalChords * 2 + 16;
+                int iterations = 0;
+                while (iterations < maxIterations)
                 {
-                    int relativeOffset = static_cast<int>((nextTransitionBeat - startBeat) / beatsPerSample);
+                    ++iterations;
 
-                    // Send NoteOff for all currently sounding notes.
-                    for (int i = 0; i < mNumSoundingNotes; ++i)
-                        midiMessages.addEvent(juce::MidiMessage::noteOff(1, mSoundingNotes[i]), relativeOffset);
-                    mNumSoundingNotes = 0;
+                    double nextTransitionBeat = cumBeats[mCurrentChordIndex + 1];
 
-                    // Advance to next slot.
-                    mCurrentChordIndex++;
-                    if (mCurrentChordIndex >= chordData->totalChords)
+                    if (nextTransitionBeat > endBeat)
+                        break;
+
+                    if (nextTransitionBeat >= startBeat)
                     {
-                        mCurrentChordIndex = 0;
-                        startBeat -= totalBeats;
-                        endBeat -= totalBeats;
-                    }
+                        // A6: relativeOffsetをjlimitでクランプ
+                        int relativeOffset = static_cast<int>((nextTransitionBeat - startBeat) / beatsPerSample);
+                        relativeOffset = juce::jlimit(0, numSamples - 1, relativeOffset);
 
-                    // Send NoteOn for the new slot if not empty.
-                    if (!chordData->notes[mCurrentChordIndex].empty())
-                    {
-                        for (int n = 0; n < static_cast<int>(chordData->notes[mCurrentChordIndex].size())
-                             && mNumSoundingNotes < kMaxSoundingNotes; ++n)
+                        // Send NoteOff for all currently sounding notes.
+                        for (int i = 0; i < mNumSoundingNotes; ++i)
+                            midiMessages.addEvent(juce::MidiMessage::noteOff(1, mSoundingNotes[i]), relativeOffset);
+                        mNumSoundingNotes = 0;
+
+                        // Advance to next slot.
+                        mCurrentChordIndex++;
+                        if (mCurrentChordIndex >= chordData->totalChords)
                         {
-                            const int note = chordData->notes[mCurrentChordIndex][n];
-                            bool dup = false;
-                            for (int d = 0; d < mNumSoundingNotes; ++d)
-                                if (mSoundingNotes[d] == note) { dup = true; break; }
-                            if (!dup)
+                            mCurrentChordIndex = 0;
+                            startBeat -= totalBeats;
+                            endBeat -= totalBeats;
+                        }
+
+                        // Send NoteOn for the new slot if not empty.
+                        if (!chordData->notes[mCurrentChordIndex].empty())
+                        {
+                            for (int n = 0; n < static_cast<int>(chordData->notes[mCurrentChordIndex].size())
+                                 && mNumSoundingNotes < kMaxSoundingNotes; ++n)
                             {
-                                mSoundingNotes[mNumSoundingNotes++] = note;
-                                midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), relativeOffset);
+                                const int note = chordData->notes[mCurrentChordIndex][n];
+                                bool dup = false;
+                                for (int d = 0; d < mNumSoundingNotes; ++d)
+                                    if (mSoundingNotes[d] == note) { dup = true; break; }
+                                if (!dup)
+                                {
+                                    mSoundingNotes[mNumSoundingNotes++] = note;
+                                    midiMessages.addEvent(juce::MidiMessage::noteOn(1, note, static_cast<uint8>(64)), relativeOffset);
+                                }
                             }
                         }
+                        mPlayingSlotShared.store(mCurrentChordIndex, std::memory_order_relaxed);
                     }
-                    mPlayingSlotShared.store(mCurrentChordIndex, std::memory_order_relaxed);
-                }
-                else
-                {
-                    // Transition before this block; advance index without MIDI events.
-                    mCurrentChordIndex++;
-                    if (mCurrentChordIndex >= chordData->totalChords)
+                    else
                     {
-                        mCurrentChordIndex = 0;
-                        startBeat -= totalBeats;
-                        endBeat -= totalBeats;
+                        // Transition before this block; advance index without MIDI events.
+                        mCurrentChordIndex++;
+                        if (mCurrentChordIndex >= chordData->totalChords)
+                        {
+                            mCurrentChordIndex = 0;
+                            startBeat -= totalBeats;
+                            endBeat -= totalBeats;
+                        }
+                        mPlayingSlotShared.store(mCurrentChordIndex, std::memory_order_relaxed);
                     }
-                    mPlayingSlotShared.store(mCurrentChordIndex, std::memory_order_relaxed);
+                }
+
+                // F3: maxIterations到達で打ち切られた場合、chordIndexを再同期
+                if (iterations >= maxIterations)
+                {
+                    double wrappedPos = fmod(mCurrentBeatPosition, totalBeats);
+                    if (wrappedPos < 0) wrappedPos += totalBeats;
+                    for (int i = 0; i < chordData->totalChords; ++i)
+                    {
+                        if (wrappedPos < cumBeats[i + 1])
+                        {
+                            mCurrentChordIndex = i;
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -298,27 +362,40 @@ void AudioEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
 
     bool pluginWasReady = false;
     {
-        juce::ScopedLock sl (pluginLock);
-        if (mPluginInstance != nullptr && std::atomic_load(&mPluginReady))
+        // A2: ScopedLock → tryEnter() でオーディオスレッドをブロックしない
+        if (pluginLock.tryEnter())
         {
-            pluginWasReady = true;
-            int numDeviceCh = buffer.getNumChannels();
-            int numPluginOut = mPluginInstance->getTotalNumOutputChannels();
-            int numCh = juce::jmax (numDeviceCh, numPluginOut);
-            mTempBuffer.setSize (numCh, buffer.getNumSamples(), false, false, true);
-            mTempBuffer.clear();
+            if (mPluginInstance != nullptr && std::atomic_load(&mPluginReady))
+            {
+                int numDeviceCh = buffer.getNumChannels();
+                int numPluginOut = mPluginInstance->getTotalNumOutputChannels();
+                int numCh = juce::jmax (numDeviceCh, numPluginOut);
 
-            try
-            {
-                mPluginInstance->processBlock (mTempBuffer, midiMessages);
-                for (int ch = 0; ch < numDeviceCh; ++ch)
-                    buffer.copyFrom (ch, 0, mTempBuffer, ch, 0, buffer.getNumSamples());
+                // A1: processBlock内でのsetSizeによる再確保はスキップ
+                // F1: 確保済み容量を超える場合はフォールバックへ(pluginWasReady=false)
+                if (mTempBuffer.getNumChannels() >= numCh && mTempBuffer.getNumSamples() >= buffer.getNumSamples())
+                {
+                    pluginWasReady = true;
+                    mTempBuffer.clear();
+
+                    try
+                    {
+                        mPluginInstance->processBlock (mTempBuffer, midiMessages);
+                        for (int ch = 0; ch < numDeviceCh; ++ch)
+                            buffer.copyFrom (ch, 0, mTempBuffer, ch, 0, buffer.getNumSamples());
+                    }
+                    catch (...)
+                    {
+                        // A8: 例外時にpluginReady=falseにして以後フォールバックへ
+                        juce::Logger::writeToLog ("Exception caught during plugin processBlock");
+                        std::atomic_store(&mPluginReady, false);
+                        pluginWasReady = false;
+                    }
+                }
             }
-            catch (...)
-            {
-                juce::Logger::writeToLog ("Exception caught during plugin processBlock");
-            }
+            pluginLock.exit();
         }
+        // tryEnter失敗時はpluginWasReady=falseのまま（フォールバックシンセ）
     }
 
     if (!pluginWasReady)
@@ -362,6 +439,8 @@ void AudioEngine::loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> 
 
     if (mPluginInstance != nullptr)
     {
+        // A5: prepareToPlay前にバスを有効化
+        mPluginInstance->enableAllBuses();
         mPluginInstance->prepareToPlay (sampleRate, blockSize);
 
         // Size scratch buffer while mPluginReady is still false.
@@ -374,39 +453,16 @@ void AudioEngine::loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> 
     std::atomic_store(&mPluginReady, true);
 }
 
-void AudioEngine::loadPlugin(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize)
-{
-    {
-        juce::ScopedLock sl (pluginLock);
-        std::atomic_store(&mPluginReady, false);
-        if (mPluginInstance != nullptr)
-            mPluginInstance->releaseResources();
-        mPluginInstance = std::move(plugin);
-        if (mPluginInstance != nullptr)
-            mPluginInstance->setPlayHead (&mPlayHead);
-    }
-
-    if (mPluginInstance != nullptr)
-    {
-        mPluginInstance->prepareToPlay (sampleRate, blockSize);
-
-        const int maxCh = juce::jmax (2, juce::jmax (mPluginInstance->getTotalNumInputChannels(),
-                                                      mPluginInstance->getTotalNumOutputChannels()));
-        mTempBuffer.setSize (maxCh, blockSize);
-    }
-
-    juce::ScopedLock sl (pluginLock);
-    std::atomic_store(&mPluginReady, true);
-}
-
 void AudioEngine::setBpm(int newBpm)
 {
-    mBpm.store(newBpm);
+    // A4: BPMを1〜999にクランプ
+    mBpm.store(juce::jlimit(1, 999, newBpm));
 }
 
 void AudioEngine::setVolume(float newVolume)
 {
-    mVolume.store(newVolume);
+    // A4: Volumeを0.0〜1.0にクランプ
+    mVolume.store(juce::jlimit(0.0f, 1.0f, newVolume));
 }
 
 void AudioEngine::setChordData(std::shared_ptr<ChordData> newData)

@@ -31,14 +31,16 @@ void ProgressionModel::setNumBars (int newNumBars)
 
 const Bar& ProgressionModel::getBar (int barIndex) const
 {
-    jassert (barIndex >= 0 && barIndex < maxBars);
-    return bars [barIndex];
+    // Release-safe: clamp rather than assert on out-of-range indices.
+    const int i = std::clamp (barIndex, 0, maxBars - 1);
+    return bars [static_cast<size_t> (i)];
 }
 
 BarSubdivision ProgressionModel::getSubdivision (int barIndex) const
 {
-    jassert (barIndex >= 0 && barIndex < numBars);
-    return bars [barIndex].subdivision;
+    // Release-safe: clamp to active bar range (numBars is always >= 1).
+    const int i = std::clamp (barIndex, 0, std::max (0, numBars - 1));
+    return bars [static_cast<size_t> (i)].subdivision;
 }
 
 void ProgressionModel::setSubdivision (int barIndex, BarSubdivision newSubdivision)
@@ -46,7 +48,7 @@ void ProgressionModel::setSubdivision (int barIndex, BarSubdivision newSubdivisi
     if (barIndex < 0 || barIndex >= numBars)
         return;
 
-    bars [barIndex].subdivision = newSubdivision;
+    bars [static_cast<size_t> (barIndex)].subdivision = newSubdivision;
     notifyChanged();
 }
 
@@ -54,19 +56,19 @@ std::optional<Chord> ProgressionModel::getChord (int barIndex, int slotIndex) co
 {
     if (barIndex < 0 || barIndex >= numBars)
         return std::nullopt;
-    if (slotIndex < 0 || slotIndex >= bars [barIndex].numSlots())
+    if (slotIndex < 0 || slotIndex >= bars [static_cast<size_t> (barIndex)].numSlots())
         return std::nullopt;
-    return bars [barIndex].slots [slotIndex];
+    return bars [static_cast<size_t> (barIndex)].slots [static_cast<size_t> (slotIndex)];
 }
 
 void ProgressionModel::setChord (int barIndex, int slotIndex, std::optional<Chord> chord)
 {
     if (barIndex < 0 || barIndex >= numBars)
         return;
-    if (slotIndex < 0 || slotIndex >= bars [barIndex].numSlots())
+    if (slotIndex < 0 || slotIndex >= bars [static_cast<size_t> (barIndex)].numSlots())
         return;
 
-    bars [barIndex].slots [slotIndex] = std::move (chord);
+    bars [static_cast<size_t> (barIndex)].slots [static_cast<size_t> (slotIndex)] = std::move (chord);
     notifyChanged();
 }
 
@@ -74,7 +76,7 @@ void ProgressionModel::clear()
 {
     for (int i = 0; i < numBars; ++i)
     {
-        bars [i].slots.fill (std::nullopt);
+        bars [static_cast<size_t> (i)].slots.fill (std::nullopt);
     }
     notifyChanged();
 }
@@ -97,12 +99,12 @@ std::vector<FlatChord> ProgressionModel::flatten() const
 
     for (int b = 0; b < numBars; ++b)
     {
-        const int numSlots = bars [b].numSlots();
-        const double beats = bars [b].beatsPerSlot();
+        const int numSlots = bars [static_cast<size_t> (b)].numSlots();
+        const double beats = bars [static_cast<size_t> (b)].beatsPerSlot();
 
         for (int s = 0; s < numSlots; ++s)
         {
-            result.push_back ({bars [b].slots [s], beats, b, s});
+            result.push_back ({bars [static_cast<size_t> (b)].slots [static_cast<size_t> (s)], beats, b, s});
         }
     }
     return result;
@@ -112,12 +114,38 @@ int ProgressionModel::totalSlots() const noexcept
 {
     int total = 0;
     for (int i = 0; i < numBars; ++i)
-        total += bars [i].numSlots();
+        total += bars [static_cast<size_t> (i)].numSlots();
     return total;
+}
+
+void ProgressionModel::beginBulkEdit() noexcept
+{
+    ++bulkEditDepth;
+}
+
+void ProgressionModel::endBulkEdit()
+{
+    if (bulkEditDepth <= 0)
+        return;
+
+    --bulkEditDepth;
+
+    if (bulkEditDepth == 0 && bulkEditDirty)
+    {
+        bulkEditDirty = false;
+        if (onChanged)
+            onChanged();
+    }
 }
 
 void ProgressionModel::notifyChanged()
 {
+    if (bulkEditDepth > 0)
+    {
+        bulkEditDirty = true;
+        return;
+    }
+
     if (onChanged)
         onChanged();
 }
@@ -204,6 +232,8 @@ const std::vector<PresetProgression>& ProgressionPresets::all()
 
 void ProgressionPresets::applyToModel (const PresetProgression& preset, ProgressionModel& model)
 {
+    ProgressionModel::ScopedBulkEdit bulk (model);
+
     const auto& key = model.getKey();
     const int tonic = key.isMajor ? key.tonicPitchClass : (key.tonicPitchClass + 3) % 12;
 

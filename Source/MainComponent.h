@@ -51,7 +51,6 @@ public:
     void visibilityChanged() override;
 
     void timerCallback() override;
-    void markPluginAsReady();
 
 private:
     void loadPlugin();
