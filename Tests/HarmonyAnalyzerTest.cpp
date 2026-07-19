@@ -115,6 +115,63 @@ public:
             expect (analysis[0].technique != NonDiatonicTechnique::SecondaryDominant);
         }
 
+
+        beginTest ("SecondaryDominant: final A7 in C major (no next chord)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,     -1 }); // C
+            model.setChord (1, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expect (analysis[1].label.contains ("V7/II"));
+        }
+
+        beginTest ("SecondaryDominant: final Db7 in C major -> TritoneSub");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,     -1 }); // C
+            model.setChord (1, 0, Chord { 1, ChordQuality::Dominant7, -1 }); // Db7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique != NonDiatonicTechnique::SecondaryDominant);
+            expect (analysis[1].technique == NonDiatonicTechnique::TritoneSubstitution);
+        }
+
+        beginTest ("Regression: final G7 in C major stays diatonic");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7,    -1 }); // Dm7
+            model.setChord (1, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (analysis[1].diatonic);
+        }
+
+        beginTest ("SecondaryDominant: final B7 in A minor (no next chord)");
+        {
+            ProgressionModel model;
+            model.setKey (KeyContext { 9, false });
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Minor,     -1 }); // Am
+            model.setChord (1, 0, Chord { 11, ChordQuality::Dominant7, -1 }); // B7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+        }
         beginTest ("DoubleDominant: D7 in C major");
         {
             ProgressionModel model;
@@ -170,6 +227,49 @@ public:
             expect (! analysis[1].diatonic);
             expect (analysis[1].technique == NonDiatonicTechnique::PassingDiminished);
             expectEquals (analysis[1].label, juce::String ("Pass.Dim"));
+        }
+
+        beginTest ("PassingDiminished descending: Am - D#dim - Dm7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Minor,      -1 }); // Am
+            model.setChord (1, 0, Chord { 3, ChordQuality::Diminished, -1 }); // D#dim
+            model.setChord (2, 0, Chord { 2, ChordQuality::Minor7,     -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::PassingDiminished);
+            expectEquals (analysis[1].label, juce::String ("Pass.Dim"));
+        }
+
+        beginTest ("PassingDiminished descending: Am - D#dim7 - Dm7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Minor,       -1 }); // Am
+            model.setChord (1, 0, Chord { 3, ChordQuality::Diminished7, -1 }); // D#dim7
+            model.setChord (2, 0, Chord { 2, ChordQuality::Minor7,      -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::PassingDiminished);
+            expectEquals (analysis[1].label, juce::String ("Pass.Dim"));
+        }
+
+        beginTest ("PassingDiminished negative: C - F#dim - C is not Pass.Dim");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,      -1 }); // C
+            model.setChord (1, 0, Chord { 6, ChordQuality::Diminished, -1 }); // F#dim
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major,      -1 }); // C
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[1].technique != NonDiatonicTechnique::PassingDiminished);
         }
 
         beginTest ("RelatedTwoMinor: Em7b5 - A7 - Dm7");
@@ -553,6 +653,85 @@ public:
                 }
             }
             expect (found, "Pop Punk should be detected in G minor key");
+        }
+
+        beginTest ("SusDominant: E7 -> Em7/A -> CM7 in C major (functional root reinterpretation)");
+        {
+            // E7's plain root offset from C is 4 (not 2), so this does not collide
+            // with the DoubleDominant rule; it resolves via Em7/A's functional
+            // root (A, from the sus reinterpretation) rather than Em7/A's literal
+            // root (E), which would land on the tonic-adjacent III degree instead.
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7,     9 }); // Em7/A
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major7,    -1 }); // CM7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 3);
+
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expect (analysis[0].label.contains ("V7/"));
+
+            // Em7/A itself is diatonic in C major (E, G, B, D, A all in scale).
+            expect (analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::None);
+        }
+
+        beginTest ("SusDominant regression: Em7/A stays diatonic in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7, -1 }); // Dm7
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7,  9 }); // Em7/A
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major7, -1 }); // CM7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 3);
+
+            expect (analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::None);
+        }
+
+        beginTest ("SusDominant: F#m7/B -> Em7 in C major (V7/III via functional root)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 6, ChordQuality::Minor7, 11 }); // F#m7/B
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7, -1 }); // Em7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/III)"));
+        }
+
+        beginTest ("detectPatterns: Leading Resolution via sus reinterpretation (Em7/A -> Dm7)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Minor7, 9 }); // Em7/A
+            model.setChord (1, 0, Chord { 2, ChordQuality::Minor7, -1 }); // Dm7
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Leading Resolution")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 1);
+                }
+            }
+            expect (found, "Leading Resolution should be detected for Em7/A -> Dm7 via sus reinterpretation");
         }
     }
 };
