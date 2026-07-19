@@ -17,6 +17,10 @@ enum class NonDiatonicTechnique
     PassingDiminished,     // dim7 chromatically connecting two diatonic chords
     PicardyThird,          // major tonic at the end of a minor-key progression
     RelatedTwoMinor,       // IIm7 paired with a following secondary dominant
+    CommonToneDiminished,  // dim7 sharing its root with the following chord
+    BluesSeventh,          // non-functional I7 / IV7 (blues)
+    BackdoorDominant,      // bVII7 resolving to I
+    ChromaticApproach,     // same-quality chord a semitone from the next chord
     Unknown                // non-diatonic but no technique recognised
 };
 

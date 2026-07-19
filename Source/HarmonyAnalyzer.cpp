@@ -354,6 +354,20 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     if (matchesTritoneSubstitution (c, next, key))
         return { false, NonDiatonicTechnique::TritoneSubstitution, "Tritone Sub", {} };
 
+    // 5b. Backdoor Dominant (bVII7 -> I)
+    if (key.isMajor && isDominantQuality (c.quality) && offset == 10 && next.has_value()
+        && normalizePc (functionalRootPitchClass (*next) - key.tonicPitchClass) == 0
+        && (next->quality == ChordQuality::Major
+            || next->quality == ChordQuality::Major7
+            || next->quality == ChordQuality::Sixth))
+    {
+        return { false, NonDiatonicTechnique::BackdoorDominant, "Backdoor (bVII7)", {} };
+    }
+
+    // 5c. Blues Seventh (non-functional I7 / IV7)
+    if (key.isMajor && isDominantQuality (c.quality) && (offset == 0 || offset == 5))
+        return { false, NonDiatonicTechnique::BluesSeventh, "Blues 7th", {} };
+
     // 6. Passing Diminished
     // Ascending: dim root is a chromatic step above prev and/or below next.
     // Descending: dim root is a chromatic step above next (prev is ignored).
@@ -381,6 +395,14 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
 
         if (pass)
             return { false, NonDiatonicTechnique::PassingDiminished, "Pass.Dim", {} };
+
+        // 6b. Common-tone diminished: same root as next (or prev when trailing).
+        if ((hasNext && normalizePc (next->rootPitchClass) == normalizePc (c.rootPitchClass))
+            || (! hasNext && hasPrev
+                && normalizePc (prev->rootPitchClass) == normalizePc (c.rootPitchClass)))
+        {
+            return { false, NonDiatonicTechnique::CommonToneDiminished, "C.T.Dim", {} };
+        }
     }
 
     // 7. Related II minor (look-ahead: next is Sec.Dom or Tritone Sub)
@@ -426,6 +448,14 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
             a.borrowedScale = ChordModel::pitchClassName (key.tonicPitchClass) + " Natural minor";
             return a;
         }
+    }
+
+    // 8b. Chromatic Approach (same-quality chord a semitone above/below next)
+    if (next.has_value() && c.quality == next->quality
+        && (normalizePc (c.rootPitchClass + 1) == normalizePc (next->rootPitchClass)
+            || normalizePc (c.rootPitchClass - 1) == normalizePc (next->rootPitchClass)))
+    {
+        return { false, NonDiatonicTechnique::ChromaticApproach, "Chr.App", {} };
     }
 
     // 9. Modal Interchange

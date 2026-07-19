@@ -272,6 +272,121 @@ public:
             expect (analysis[1].technique != NonDiatonicTechnique::PassingDiminished);
         }
 
+        beginTest ("CommonToneDiminished: C - Cdim7 - C");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,       -1 }); // C
+            model.setChord (1, 0, Chord { 0, ChordQuality::Diminished7, -1 }); // Cdim7
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major,       -1 }); // C
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::CommonToneDiminished);
+            expectEquals (analysis[1].label, juce::String ("C.T.Dim"));
+        }
+
+        beginTest ("CommonToneDiminished: C - Cdim - CM7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,      -1 }); // C
+            model.setChord (1, 0, Chord { 0, ChordQuality::Diminished, -1 }); // Cdim
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major7,     -1 }); // CM7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::CommonToneDiminished);
+            expectEquals (analysis[1].label, juce::String ("C.T.Dim"));
+        }
+
+        beginTest ("CommonToneDiminished trailing: C - Cdim7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,       -1 }); // C
+            model.setChord (1, 0, Chord { 0, ChordQuality::Diminished7, -1 }); // Cdim7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::CommonToneDiminished);
+            expectEquals (analysis[1].label, juce::String ("C.T.Dim"));
+        }
+
+        beginTest ("CommonToneDiminished regression: C - C#dim7 - Dm7 stays Pass.Dim");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,       -1 }); // C
+            model.setChord (1, 0, Chord { 1, ChordQuality::Diminished7, -1 }); // C#dim7
+            model.setChord (2, 0, Chord { 2, ChordQuality::Minor7,      -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[1].technique == NonDiatonicTechnique::PassingDiminished);
+            expect (analysis[1].technique != NonDiatonicTechnique::CommonToneDiminished);
+            expectEquals (analysis[1].label, juce::String ("Pass.Dim"));
+        }
+
+        beginTest ("BluesSeventh: C7 -> G7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Dominant7, -1 }); // C7
+            model.setChord (1, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::BluesSeventh);
+            expectEquals (analysis[0].label, juce::String ("Blues 7th"));
+        }
+
+        beginTest ("BluesSeventh: F7 -> C in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Dominant7, -1 }); // F7
+            model.setChord (1, 0, Chord { 0, ChordQuality::Major,       -1 }); // C
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 2);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::BluesSeventh);
+        }
+
+        beginTest ("BluesSeventh regression: C7 -> F in C major stays Sec.Dom");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Dominant7, -1 }); // C7
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,       -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expect (analysis[0].label.contains ("V7/IV"));
+        }
+
+        beginTest ("BluesSeventh regression: F7 -> Bb in C major stays Sec.Dom");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Dominant7, -1 }); // F7
+            model.setChord (1, 0, Chord { 10, ChordQuality::Major,     -1 }); // Bb
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+        }
+
         beginTest ("RelatedTwoMinor: Em7b5 - A7 - Dm7");
         {
             ProgressionModel model;
@@ -732,6 +847,101 @@ public:
                 }
             }
             expect (found, "Leading Resolution should be detected for Em7/A -> Dm7 via sus reinterpretation");
+        }
+
+        beginTest ("BackdoorDominant: Fm7 - Bb7 - CM7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 5,  ChordQuality::Minor7,    -1 }); // Fm7
+            model.setChord (1, 0, Chord { 10, ChordQuality::Dominant7, -1 }); // Bb7
+            model.setChord (2, 0, Chord { 0,  ChordQuality::Major7,    -1 }); // CM7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expectEquals ((int) analysis.size(), 3);
+            expect (analysis[0].technique == NonDiatonicTechnique::SubdominantMinor);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::BackdoorDominant);
+            expect (analysis[1].label.startsWith ("Backdoor"));
+        }
+
+        beginTest ("BackdoorDominant regression: Bb7 - FM7 stays SubdominantMinor");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 10, ChordQuality::Dominant7, -1 }); // Bb7
+            model.setChord (1, 0, Chord { 5,  ChordQuality::Major7,    -1 }); // FM7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SubdominantMinor);
+        }
+
+        beginTest ("BackdoorDominant regression: Bb7 - EbM7 stays SecondaryDominant");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 10, ChordQuality::Dominant7, -1 }); // Bb7
+            model.setChord (1, 0, Chord { 3,  ChordQuality::Major7,    -1 }); // EbM7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+        }
+
+        beginTest ("ChromaticApproach: C#m7 - Dm7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 1, ChordQuality::Minor7, -1 }); // C#m7
+            model.setChord (1, 0, Chord { 2, ChordQuality::Minor7, -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::ChromaticApproach);
+            expectEquals (analysis[0].label, juce::String ("Chr.App"));
+        }
+
+        beginTest ("ChromaticApproach: Ebm7 - Dm7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 3, ChordQuality::Minor7, -1 }); // Ebm7
+            model.setChord (1, 0, Chord { 2, ChordQuality::Minor7, -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::ChromaticApproach);
+        }
+
+        beginTest ("ChromaticApproach regression: Fm7 - Em7 stays SubdominantMinor");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Minor7, -1 }); // Fm7
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7, -1 }); // Em7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SubdominantMinor);
+        }
+
+        beginTest ("ChromaticApproach quality mismatch: C#7 - Dm7 is not ChromaticApproach");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 1, ChordQuality::Dominant7, -1 }); // C#7
+            model.setChord (1, 0, Chord { 2, ChordQuality::Minor7,    -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique != NonDiatonicTechnique::ChromaticApproach);
         }
     }
 };
