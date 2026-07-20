@@ -1479,6 +1479,278 @@ public:
             expect (! analysis[1].diatonic);
             expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
         }
+
+        //======================================================================
+        // Chromatic Mediant
+        //======================================================================
+        beginTest ("ChromaticMediant: C -> Ab -> C in C major (bVI after tonic)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+            model.setChord (1, 0, Chord { 8, ChordQuality::Major, -1 }); // Ab
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::ChromaticMediant);
+            expect (analysis[1].label.contains ("bVI"));
+        }
+
+        beginTest ("ChromaticMediant: C -> E -> Am in C major (III after tonic)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major, -1 }); // E
+            model.setChord (2, 0, Chord { 9, ChordQuality::Minor, -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::ChromaticMediant);
+            expect (analysis[1].label.contains ("III"));
+        }
+
+        beginTest ("ChromaticMediant: Am -> C#m in A minor (minor-minor mediant)");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Minor, -1 }); // Am
+            model.setChord (1, 0, Chord { 1, ChordQuality::Minor, -1 }); // C#m
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::ChromaticMediant);
+            expect (analysis[1].label.contains ("III"));
+        }
+
+        beginTest ("ChromaticMediant: G7 -> E -> C in C major (diatonic next fallback)");
+        {
+            // prev (G7) is diatonic but not a mediant partner (dominant
+            // quality), so rule 8d must fall through to next (C).
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major,     -1 }); // E
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major,     -1 }); // C
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::ChromaticMediant);
+            expect (analysis[1].label.contains ("III"));
+        }
+
+        beginTest ("ChromaticMediant regression: lone Fm in C major stays Subdom.Minor");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (1);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Minor, -1 }); // Fm
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SubdominantMinor);
+        }
+
+        beginTest ("ChromaticMediant regression: F -> Ab in C major stays Subdom.Minor");
+        {
+            // prev is not the tonic, so rule 7b must not fire and rule 8
+            // (Subdominant Minor) keeps the bVI reading.
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Major, -1 }); // F
+            model.setChord (1, 0, Chord { 8, ChordQuality::Major, -1 }); // Ab
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SubdominantMinor);
+        }
+
+        //======================================================================
+        // Pedal Point
+        //======================================================================
+        beginTest ("detectPatterns: Tonic Pedal C - F/C - G/C - C in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,  0 }); // F/C
+            model.setChord (2, 0, Chord { 7, ChordQuality::Major,  0 }); // G/C
+            model.setChord (3, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Tonic Pedal")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("detectPatterns: Dominant Pedal Dm7/G - F/G - G7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7,     7 }); // Dm7/G
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,      7 }); // F/G
+            model.setChord (2, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Dominant Pedal")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 2);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("detectPatterns: Pedal negative: C - C7 - C6 without slash stays Cliche");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,     -1 }); // C
+            model.setChord (1, 0, Chord { 0, ChordQuality::Dominant7, -1 }); // C7
+            model.setChord (2, 0, Chord { 0, ChordQuality::Sixth,     -1 }); // C6
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool foundPedal = false;
+            bool foundCliche = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Tonic Pedal" || p.name == "Dominant Pedal"
+                    || p.name == "Pedal Point")
+                    foundPedal = true;
+                if (p.name == "Cliche")
+                    foundCliche = true;
+            }
+            expect (! foundPedal, "same-root run without a slash chord must not be a pedal");
+            expect (foundCliche);
+        }
+
+        beginTest ("detectPatterns: Pedal negative: two chords C - F/C only");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,  0 }); // F/C
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool foundPedal = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Tonic Pedal" || p.name == "Dominant Pedal"
+                    || p.name == "Pedal Point")
+                    foundPedal = true;
+            }
+            expect (! foundPedal, "two chords are too short for a pedal point");
+        }
+
+        //======================================================================
+        // Constant Structure
+        //======================================================================
+        beginTest ("detectPatterns: Constant Structure CM7 - EbM7 - AbM7 - DbM7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major7, -1 }); // CM7
+            model.setChord (1, 0, Chord { 3, ChordQuality::Major7, -1 }); // EbM7
+            model.setChord (2, 0, Chord { 8, ChordQuality::Major7, -1 }); // AbM7
+            model.setChord (3, 0, Chord { 1, ChordQuality::Major7, -1 }); // DbM7
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Constant Structure")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("detectPatterns: Constant Structure Dm7 - Em7 - Fm7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7, -1 }); // Dm7
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7, -1 }); // Em7
+            model.setChord (2, 0, Chord { 5, ChordQuality::Minor7, -1 }); // Fm7 (non-diatonic)
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Constant Structure")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 2);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("detectPatterns: Constant Structure negative: all-diatonic Dm7 - Em7 - Am7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7, -1 }); // Dm7
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7, -1 }); // Em7
+            model.setChord (2, 0, Chord { 9, ChordQuality::Minor7, -1 }); // Am7
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Constant Structure")
+                    found = true;
+            }
+            expect (! found, "an all-diatonic run is a plain sequence, not constant structure");
+        }
+
+        beginTest ("detectPatterns: Constant Structure negative: Power5 run C5 - D5 - E5");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Power5, -1 }); // C5
+            model.setChord (1, 0, Chord { 2, ChordQuality::Power5, -1 }); // D5
+            model.setChord (2, 0, Chord { 4, ChordQuality::Power5, -1 }); // E5
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Constant Structure")
+                    found = true;
+            }
+            expect (! found, "power chords carry no third, so no constant structure");
+        }
     }
 };
 
