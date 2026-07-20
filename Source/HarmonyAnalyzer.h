@@ -21,6 +21,7 @@ enum class NonDiatonicTechnique
     BluesSeventh,          // non-functional I7 / IV7 (blues)
     BackdoorDominant,      // bVII7 resolving to I
     ChromaticApproach,     // same-quality chord a semitone from the next chord
+    LineCliche,            // passing chord harmonizing a single chromatic voice line
     Unknown                // non-diatonic but no technique recognised
 };
 

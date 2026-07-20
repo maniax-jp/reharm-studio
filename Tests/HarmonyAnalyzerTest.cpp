@@ -943,6 +943,82 @@ public:
             const auto analysis = HarmonyAnalyzer::analyzeAll (model);
             expect (analysis[0].technique != NonDiatonicTechnique::ChromaticApproach);
         }
+
+        beginTest ("LineCliche: Fm - Eaug - Fm7/Eb in Eb major");
+        {
+            const KeyContext ebMajor { 3, true };
+
+            ProgressionModel model;
+            model.setKey (ebMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Minor,  -1 }); // Fm
+            model.setChord (1, 0, Chord { 4, ChordQuality::Augmented, -1 }); // Eaug
+            model.setChord (2, 0, Chord { 5, ChordQuality::Minor7,  3 }); // Fm7/Eb
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (analysis[2].diatonic);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::LineCliche);
+            expectEquals (analysis[1].label, juce::String ("Line Cliche"));
+        }
+
+        beginTest ("LineCliche: F - Faug - F6 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
+            model.setChord (1, 0, Chord { 5, ChordQuality::Augmented, -1 }); // Faug
+            model.setChord (2, 0, Chord { 5, ChordQuality::Sixth,     -1 }); // F6
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::LineCliche);
+        }
+
+        beginTest ("LineCliche: Cm - CmM7 - Cm7 in C minor (supersedes M.I.)");
+        {
+            const KeyContext cMinor { 0, false };
+
+            ProgressionModel model;
+            model.setKey (cMinor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Minor,      -1 }); // Cm
+            model.setChord (1, 0, Chord { 0, ChordQuality::MinorMajor7, -1 }); // CmM7
+            model.setChord (2, 0, Chord { 0, ChordQuality::Minor7,     -1 }); // Cm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::LineCliche);
+        }
+
+        beginTest ("LineCliche negative: C - E - F in C major (two moving tones)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major, -1 }); // E
+            model.setChord (2, 0, Chord { 5, ChordQuality::Major, -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[1].technique != NonDiatonicTechnique::LineCliche);
+        }
+
+        beginTest ("LineCliche negative: Eaug - Fm7 with no prev chord");
+        {
+            const KeyContext ebMajor { 3, true };
+
+            ProgressionModel model;
+            model.setKey (ebMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Augmented, -1 }); // Eaug
+            model.setChord (1, 0, Chord { 5, ChordQuality::Minor7,    -1 }); // Fm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique != NonDiatonicTechnique::LineCliche);
+        }
     }
 };
 

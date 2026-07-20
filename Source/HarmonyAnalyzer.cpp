@@ -458,6 +458,39 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         return { false, NonDiatonicTechnique::ChromaticApproach, "Chr.App", {} };
     }
 
+    // 8c. Line Cliche (passing chord harmonizing a single chromatic voice line:
+    // one voice moves prev -> x -> next by semitone in the same direction, while
+    // every other chord tone is shared with both neighbours).
+    if (prev.has_value() && next.has_value())
+    {
+        const auto currentTones = ChordModel::chordTonePitchClasses (c);
+
+        if (currentTones.size() >= 3)
+        {
+            std::set<int> P, C, N;
+            for (int pc : ChordModel::chordTonePitchClasses (*prev)) P.insert (normalizePc (pc));
+            for (int pc : currentTones)                              C.insert (normalizePc (pc));
+            for (int pc : ChordModel::chordTonePitchClasses (*next)) N.insert (normalizePc (pc));
+
+            std::vector<int> diffP, diffN;
+            std::set_difference (C.begin(), C.end(), P.begin(), P.end(), std::back_inserter (diffP));
+            std::set_difference (C.begin(), C.end(), N.begin(), N.end(), std::back_inserter (diffN));
+
+            if (diffP.size() == 1 && diffN.size() == 1 && diffP[0] == diffN[0])
+            {
+                const int x = diffP[0];
+
+                for (int d : { 1, -1 })
+                {
+                    if (P.count (normalizePc (x - d)) != 0 && N.count (normalizePc (x + d)) != 0)
+                    {
+                        return { false, NonDiatonicTechnique::LineCliche, "Line Cliche", {} };
+                    }
+                }
+            }
+        }
+    }
+
     // 9. Modal Interchange
     {
         const ChordAnalysis mi = tryModalInterchange (c, key);
