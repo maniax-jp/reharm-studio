@@ -26,6 +26,7 @@ enum class NonDiatonicTechnique
     ItalianSixth,          // It+6: b6, 1, #4 -- resolving to V
     FrenchSixth,           // Fr+6: b6, 1, 2, #4 -- resolving to V
     GermanSixth,           // Ger+6: b6, 1, b3, #4 -- resolving to V
+    ChromaticMediant,      // major/minor triad a chromatic third away from a neighbour
     Unknown                // non-diatonic but no technique recognised
 };
 

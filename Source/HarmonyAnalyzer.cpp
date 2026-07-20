@@ -60,6 +60,34 @@ bool isRelatedTwoQuality (ChordQuality q) noexcept
         || q == ChordQuality::Minor7Flat5;
 }
 
+bool isMajorTriadFamily (ChordQuality q) noexcept
+{
+    return q == ChordQuality::Major
+        || q == ChordQuality::Major7
+        || q == ChordQuality::Sixth;
+}
+
+bool isMinorTriadFamily (ChordQuality q) noexcept
+{
+    return q == ChordQuality::Minor
+        || q == ChordQuality::Minor7;
+}
+
+// Two major-family (or two minor-family) triads a chromatic third apart --
+// e.g. C and Ab, or Am and C#m. Mixed major/minor pairs are "doubly
+// chromatic" mediants and are intentionally excluded: the harder-to-hear
+// relationship is out of scope for this heuristic.
+bool isChromaticMediantPair (const Chord& a, const Chord& b) noexcept
+{
+    const bool bothMajor = isMajorTriadFamily (a.quality) && isMajorTriadFamily (b.quality);
+    const bool bothMinor = isMinorTriadFamily (a.quality) && isMinorTriadFamily (b.quality);
+    if (! bothMajor && ! bothMinor)
+        return false;
+
+    const int diff = normalizePc (a.rootPitchClass - b.rootPitchClass);
+    return diff == 3 || diff == 4 || diff == 8 || diff == 9;
+}
+
 // If a slash chord can be reinterpreted as a sus-type dominant rooted at its
 // bass note (e.g. Em7/A -> A7sus, F/G -> G9sus), return that bass pitch class.
 // Otherwise nullopt.
@@ -658,6 +686,21 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         }
     }
 
+    // 7b. Chromatic Mediant from the tonic. When the previous chord is the
+    // tonic triad of this key and the current chord sits a chromatic third
+    // away from it (same major/minor family), read it as a mediant colour
+    // move rather than a borrowed subdominant-minor chord or modal
+    // interchange -- e.g. I -> bVI -> I or I -> III is heard as a mediant
+    // shift off the tonic, not as a IV-side borrowing.
+    if (prev.has_value()
+        && rootOffset (*prev, key) == 0
+        && (key.isMajor ? isMajorTriadFamily (prev->quality) : isMinorTriadFamily (prev->quality))
+        && isChromaticMediantPair (c, *prev))
+    {
+        return { false, NonDiatonicTechnique::ChromaticMediant,
+                 "Chr.Mediant (" + ChordModel::degreeRoman (c.rootPitchClass, key) + ")", {} };
+    }
+
     // 8. Subdominant Minor (major key): IVm, bVI, bVII, IIm7b5 from the
     // parallel minor.
     if (key.isMajor)
@@ -731,6 +774,23 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     // 8c. Line Cliche
     if (matchesLineCliche (c, prev, next))
         return { false, NonDiatonicTechnique::LineCliche, "Line Cliche", {} };
+
+    // 8d. Chromatic Mediant next to a diatonic neighbour (prev checked first,
+    // then next as a fallback). This catches mediant colour chords that are
+    // not adjacent to the tonic (rule 7b already handled that case), e.g. a
+    // plain I -> III or I -> VI move in a major key that would otherwise fall
+    // through to Unknown. Requiring the neighbour to be diatonic keeps a run
+    // of chromatic chords from all mislabelling each other as mediants.
+    for (const auto& neighbour : { prev, next })
+    {
+        if (neighbour.has_value()
+            && ChordModel::isDiatonic (*neighbour, key)
+            && isChromaticMediantPair (c, *neighbour))
+        {
+            return { false, NonDiatonicTechnique::ChromaticMediant,
+                     "Chr.Mediant (" + ChordModel::degreeRoman (c.rootPitchClass, key) + ")", {} };
+        }
+    }
 
     // 9. Modal Interchange
     {
@@ -993,6 +1053,105 @@ std::vector<DetectedPattern> HarmonyAnalyzer::detectPatterns (const ProgressionM
                         real[static_cast<size_t> (s + n - 1)].flatIndex
                     });
                 }
+            }
+        }
+    }
+
+    // ---- 6. Pedal Point (shared bass anchor, 3+ chords, moving upper harmony) ----
+    // Requires at least one true slash chord so same-root quality runs stay with Cliche.
+    {
+        int i = 0;
+        while (i < static_cast<int> (real.size()))
+        {
+            const int pedal = bassAnchorPitchClass (real[static_cast<size_t> (i)].chord);
+            int j = i + 1;
+            while (j < static_cast<int> (real.size())
+                   && bassAnchorPitchClass (real[static_cast<size_t> (j)].chord) == pedal)
+                ++j;
+
+            const int len = j - i;
+            if (len >= 3)
+            {
+                bool hasSlash = false;
+                std::set<int> roots;
+                for (int k = i; k < j; ++k)
+                {
+                    const auto& c = real[static_cast<size_t> (k)].chord;
+                    roots.insert (normalizePc (c.rootPitchClass));
+                    if (c.hasBass()
+                        && normalizePc (c.bassPitchClass) != normalizePc (c.rootPitchClass))
+                        hasSlash = true;
+                }
+
+                if (hasSlash && roots.size() >= 2)
+                {
+                    const int tonic = normalizePc (key.tonicPitchClass);
+                    const char* name = "Pedal Point";
+                    if (pedal == tonic)
+                        name = "Tonic Pedal";
+                    else if (pedal == normalizePc (tonic + 7))
+                        name = "Dominant Pedal";
+
+                    patterns.push_back ({
+                        name,
+                        real[static_cast<size_t> (i)].flatIndex,
+                        real[static_cast<size_t> (j - 1)].flatIndex
+                    });
+                }
+            }
+
+            i = j;
+        }
+    }
+
+    // ---- 7. Constant Structure (same quality, moving roots, 3+ with non-diatonic) ----
+    {
+        int i = 0;
+        while (i < static_cast<int> (real.size()))
+        {
+            const auto q = real[static_cast<size_t> (i)].chord.quality;
+            if (q == ChordQuality::Power5)
+            {
+                ++i;
+                continue;
+            }
+
+            // Longest run of identical non-Power5 quality with all adjacent roots distinct.
+            int end = i;
+            while (end + 1 < static_cast<int> (real.size())
+                   && real[static_cast<size_t> (end + 1)].chord.quality == q
+                   && normalizePc (real[static_cast<size_t> (end + 1)].chord.rootPitchClass)
+                      != normalizePc (real[static_cast<size_t> (end)].chord.rootPitchClass))
+            {
+                ++end;
+            }
+
+            if (end - i + 1 >= 3)
+            {
+                bool hasNonDiatonic = false;
+                for (int k = i; k <= end; ++k)
+                {
+                    if (! ChordModel::isDiatonic (real[static_cast<size_t> (k)].chord, key))
+                    {
+                        hasNonDiatonic = true;
+                        break;
+                    }
+                }
+
+                if (hasNonDiatonic)
+                {
+                    patterns.push_back ({
+                        "Constant Structure",
+                        real[static_cast<size_t> (i)].flatIndex,
+                        real[static_cast<size_t> (end)].flatIndex
+                    });
+                }
+
+                i = end;
+            }
+            else
+            {
+                ++i;
             }
         }
     }
