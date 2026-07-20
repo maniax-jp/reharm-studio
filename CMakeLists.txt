@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(ReharmStudio VERSION 17.10.0)
+project(ReharmStudio VERSION 17.11.0)
 
 # Build type: default to Debug
 if(NOT CMAKE_BUILD_TYPE)
