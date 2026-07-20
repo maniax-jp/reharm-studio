@@ -289,6 +289,31 @@ void SequencerView::paintCell (juce::Graphics& g, int barIndex, int slotIndex,
     g.setFont (theme::font (12.0f));
     g.drawFittedText (secondary, textArea, juce::Justification::centred, 1);
 
+    // Minor-key derivation badge (top-left, subdued): the chord is diatonic to
+    // harmonic/melodic minor, so it gets a quieter badge than a borrowing.
+    if (analysis != nullptr && analysis->diatonic
+        && analysis->derivation != reharm::MinorDerivation::None)
+    {
+        g.setFont (theme::font (11.0f, true));
+        const auto& badgeFont = g.getCurrentFont();
+
+        const juce::String badgeText = reharm::loc::tr (
+            analysis->derivation == reharm::MinorDerivation::HarmonicMinor ? "Harmonic minor"
+                                                                          : "Melodic minor");
+
+        int bw = juce::roundToInt (juce::GlyphArrangement::getStringWidth (badgeFont, badgeText)) + 10;
+        const int maxW = bounds.getWidth() - 8;
+        if (bw > maxW)
+            bw = maxW;
+
+        const int bh = 16;
+        auto badge = juce::Rectangle<float> (r.getX() + 4.0f, r.getY() + 6.0f, (float) bw, (float) bh);
+        g.setColour (theme::textDim.withAlpha (0.16f));
+        g.fillRoundedRectangle (badge, 4.0f);
+        g.setColour (theme::textDim);
+        g.drawText (badgeText, badge.toNearestInt(), juce::Justification::centred, true);
+    }
+
     // Non-diatonic badge (top-left)
     if (analysis != nullptr && ! analysis->diatonic && analysis->label.isNotEmpty())
     {
