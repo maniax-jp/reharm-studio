@@ -1266,6 +1266,117 @@ public:
             expect (analysis[0].technique != NonDiatonicTechnique::GermanSixth);
         }
 
+        beginTest ("GermanSixth reaching V through a cadential 6-4");
+        {
+            // Ger+6 -> i6/4 -> V is the standard approach, used precisely to
+            // avoid the parallel fifths of a direct Ger+6 -> V.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Dominant7, -1 }); // F7 (Ger+6)
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor,      4 }); // Am/E (i6/4)
+            model.setChord (2, 0, Chord { 4, ChordQuality::Major,     -1 }); // E (V)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::GermanSixth);
+        }
+
+        beginTest ("AugmentedSixth regression: tonic without the 5th in the bass");
+        {
+            // Am in root position is not a cadential 6-4, so F7 -> Am is a
+            // plain bVI7 motion rather than an augmented sixth.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Dominant7, -1 }); // F7
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor,     -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique != NonDiatonicTechnique::GermanSixth);
+        }
+
+        beginTest ("AugmentedSixth in a major key: It/Fr/Ger on bVI -> V");
+        {
+            // C major: b6 = Ab, #4 = F#, 2 = D, b3 = Eb.
+            const KeyContext cMaj { 0, true };
+            const Chord g { 7, ChordQuality::Major, -1 }; // G (V)
+
+            {
+                Chord it { 8, ChordQuality::Dominant7, -1 };
+                it.omitMask = Omit5;
+
+                ProgressionModel model;
+                model.setKey (cMaj);
+                model.setNumBars (2);
+                model.setChord (0, 0, it);
+                model.setChord (1, 0, g);
+
+                const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+                expect (analysis[0].technique == NonDiatonicTechnique::ItalianSixth);
+            }
+
+            {
+                Chord fr { 8, ChordQuality::Dominant7, -1 };
+                fr.fifthAlt = FifthAlt::Flat;
+
+                ProgressionModel model;
+                model.setKey (cMaj);
+                model.setNumBars (2);
+                model.setChord (0, 0, fr);
+                model.setChord (1, 0, g);
+
+                const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+                expect (analysis[0].technique == NonDiatonicTechnique::FrenchSixth);
+            }
+
+            {
+                ProgressionModel model;
+                model.setKey (cMaj);
+                model.setNumBars (2);
+                model.setChord (0, 0, Chord { 8, ChordQuality::Dominant7, -1 }); // Ab7
+                model.setChord (1, 0, g);
+
+                const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+                expect (analysis[0].technique == NonDiatonicTechnique::GermanSixth);
+            }
+        }
+
+        beginTest ("AugmentedSixth from a slash bass: B7b5/F is a French sixth");
+        {
+            // The b6 need not be the root: any chord whose bass is b6 and whose
+            // tones match the Fr+6 set counts (F A B D#).
+            Chord fr { 11, ChordQuality::Dominant7, 5 }; // B7b5/F
+            fr.fifthAlt = FifthAlt::Flat;
+
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, fr);
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major, -1 }); // E (V)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::FrenchSixth);
+        }
+
+        beginTest ("AugmentedSixth negative: added tension takes it past four tones");
+        {
+            // F9 = F A C Eb G: five tones, so it is no longer a textbook +6.
+            Chord f9 { 5, ChordQuality::Dominant7, -1 };
+            f9.addMask = AddNine;
+
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, f9);
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major, -1 }); // E (V)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique != NonDiatonicTechnique::ItalianSixth);
+            expect (analysis[0].technique != NonDiatonicTechnique::FrenchSixth);
+            expect (analysis[0].technique != NonDiatonicTechnique::GermanSixth);
+        }
+
         //======================================================================
         // Minor-key techniques previously gated to major keys
         //======================================================================
