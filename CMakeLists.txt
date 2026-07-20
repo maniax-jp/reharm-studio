@@ -2,6 +2,22 @@ cmake_minimum_required(VERSION 3.15)
 
 project(ReharmStudio VERSION 17.11.0)
 
+# ============================================================================
+# Build-location policy: `build/` is the ONLY canonical build directory.
+# Release verification must run there (`make release-check`). Any other binary
+# dir (.agent-builds/<name> via the agent-* presets, or ad-hoc dirs) is an
+# agent sandbox: its test results never count as release verification, and the
+# test binary brands its own output accordingly so logs cannot be mistaken.
+# ============================================================================
+if(CMAKE_BINARY_DIR STREQUAL "${CMAKE_SOURCE_DIR}/build")
+    set(REHARM_SANDBOX_BUILD FALSE)
+else()
+    set(REHARM_SANDBOX_BUILD TRUE)
+    message(STATUS "AGENT SANDBOX BUILD (${CMAKE_BINARY_DIR}) -- "
+                   "test results here do NOT count as release verification; "
+                   "final checks: `make release-check` (runs in build/).")
+endif()
+
 # Build type: default to Debug
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
@@ -99,6 +115,10 @@ target_sources(ReharmStudioTests PRIVATE
 )
 
 reharm_apply_common_definitions(ReharmStudioTests)
+
+if(REHARM_SANDBOX_BUILD)
+    target_compile_definitions(ReharmStudioTests PRIVATE REHARM_AGENT_SANDBOX=1)
+endif()
 
 target_link_libraries(ReharmStudioTests PRIVATE
     juce::juce_core

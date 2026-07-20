@@ -100,6 +100,21 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 
 ## ビルド方法
 
+### 標準手順（推奨）: make
+
+正規のビルドディレクトリは `build/` のみです。迷ったら `make` を実行すると使い方が表示されます。
+
+```bash
+make                        # 使い方を表示
+make app                    # アプリ本体をビルド (build/, Debug)
+make test                   # テストを build/ でビルド・実行（正規）
+make release-check          # リリース前の最終テスト（唯一の正式検証）
+make agent-test AGENT=codex # エージェント用サンドボックス (.agent-builds/codex)
+```
+
+`build/` 以外（エージェント用サンドボックス等）で実行したテストの出力には
+`[AGENT SANDBOX BUILD]` の印が自動で付き、リリース検証としてはカウントされません。
+
 ### 前提条件
 
 - macOS
@@ -152,6 +167,8 @@ build/ReharmStudio_artefacts/Debug/Reharm Studio.app
 | `debug-all` | 全てをビルド（Debug） |
 | `release` | 本体のみ（Release / arm64+x86_64 ユニバーサル） |
 | `release-all` | 全てをビルド（Release） |
+| `agent-codex` | エージェント用サンドボックス（`.agent-builds/codex`、リリース検証には使えない） |
+| `agent-grok` | エージェント用サンドボックス（`.agent-builds/grok`、リリース検証には使えない） |
 
 ```bash
 # テスト付きDebugビルド
@@ -182,11 +199,16 @@ cmake --build build --target PresetSwitchTest
 
 ### テストの実行
 
-テストを有効にしてビルドしたあと、テストバイナリを実行します。
+`make test` が構成・ビルド・実行までを一括で行います（推奨）。手動で実行する場合は
+コンソールバイナリを使います:
 
 ```bash
-"./build/ReharmStudioTests_artefacts/Debug/Reharm Studio Tests.app/Contents/MacOS/Reharm Studio Tests"
+./build/ReharmStudioTests_artefacts/Debug/ReharmStudioTests
 ```
+
+リリース前の最終テストは必ず `make release-check`（= `build/` での実行）で行ってください。
+サンドボックス（`.agent-builds/`）でのテスト結果は出力に `[AGENT SANDBOX BUILD]` の印が付き、
+最終検証としては無効です。
 
 ## 技術仕様
 
