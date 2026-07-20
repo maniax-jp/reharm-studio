@@ -1,6 +1,6 @@
 # Build artifacts
 build/
-build-*/
+.agent-builds/
 ReharmStudio_artefacts/
 
 # IDE settings

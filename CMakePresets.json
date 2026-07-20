@@ -70,6 +70,28 @@
         "BUILD_TESTS": "ON",
         "BUILD_EXPERIMENTS": "ON"
       }
+    },
+    {
+      "name": "agent-codex",
+      "displayName": "[SANDBOX] codex agent (NOT release verification)",
+      "description": "Per-agent scratch build for parallel work. Test results here NEVER count as release verification -- rerun with `make release-check` (build/).",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/.agent-builds/codex",
+      "inherits": "default",
+      "cacheVariables": {
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "agent-grok",
+      "displayName": "[SANDBOX] grok agent (NOT release verification)",
+      "description": "Per-agent scratch build for parallel work. Test results here NEVER count as release verification -- rerun with `make release-check` (build/).",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/.agent-builds/grok",
+      "inherits": "default",
+      "cacheVariables": {
+        "BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -102,6 +124,16 @@
       "name": "release-all",
       "displayName": "Release + All Targets",
       "configurePreset": "release-all"
+    },
+    {
+      "name": "agent-codex",
+      "displayName": "[SANDBOX] codex agent (NOT release verification)",
+      "configurePreset": "agent-codex"
+    },
+    {
+      "name": "agent-grok",
+      "displayName": "[SANDBOX] grok agent (NOT release verification)",
+      "configurePreset": "agent-grok"
     }
   ]
 }
