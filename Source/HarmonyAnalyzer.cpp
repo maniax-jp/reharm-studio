@@ -237,17 +237,34 @@ bool matchesNeapolitan (const Chord& c,
 //   Fr+6 = b6, 1, 2, #4       (adds the 2nd)
 //   Ger+6 = b6, 1, b3, #4     (adds the b3)
 // Ger+6 is enharmonically identical to bVI7, so the resolution target
-// disambiguates: a +6 resolves to V, whereas bVI7 as a secondary dominant would
+// disambiguates: a +6 reaches V, whereas bVI7 as a secondary dominant would
 // resolve down a fifth to bII.
+//
+// Encoding note: the model has no dedicated +6 quality, so these are entered as
+// dominant sevenths on b6 -- It = 7(omit5), Fr = 7(b5), Ger = plain 7 -- or as
+// any chord whose bass is b6 and whose tones match one of those sets.
 //
 // Returns None when the chord is not an augmented sixth.
 NonDiatonicTechnique augmentedSixthType (const Chord& c,
                                          const std::optional<Chord>& next,
                                          const KeyContext& key)
 {
-    // Must resolve to the dominant -- this is what makes it a +6 rather than
-    // an enharmonically identical bVI7.
-    if (! next.has_value() || rootOffset (*next, key) != 7)
+    if (! next.has_value())
+        return NonDiatonicTechnique::None;
+
+    // Must reach the dominant -- this is what makes it a +6 rather than an
+    // enharmonically identical bVI7. The dominant is reached either directly
+    // (V) or through a cadential 6-4: the tonic triad over the 5th degree,
+    // which is dominant in function and is the standard way of approaching V
+    // from a German sixth without parallel fifths.
+    const int nextOffset = rootOffset (*next, key);
+    const bool nextIsDominant = (nextOffset == 7);
+    const bool nextIsCadentialSixFour =
+        nextOffset == 0
+        && next->hasBass()
+        && normalizePc (next->bassPitchClass - key.tonicPitchClass) == 7;
+
+    if (! nextIsDominant && ! nextIsCadentialSixFour)
         return NonDiatonicTechnique::None;
 
     const int tonic = key.tonicPitchClass;
