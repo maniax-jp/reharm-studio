@@ -19,6 +19,13 @@ int rootOffset (const Chord& c, const KeyContext& key) noexcept
 {
     return normalizePc (c.rootPitchClass - key.tonicPitchClass);
 }
+// The pitch class that actually anchors the bottom of the chord: the slash-chord
+// bass when present, otherwise the root. Used for chromatic passing-tone judgments
+// (e.g. passing diminished) where the audible bass line matters, not the harmonic root.
+int bassAnchorPitchClass (const Chord& c) noexcept
+{
+    return normalizePc (c.hasBass() ? c.bassPitchClass : c.rootPitchClass);
+}
 
 // Offset relative to the preset reference tonic (relative major for minor keys).
 int presetRootOffset (const Chord& c, const KeyContext& key) noexcept
@@ -376,9 +383,9 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         const bool hasPrev = prev.has_value();
         const bool hasNext = next.has_value();
         const bool matchPrev = hasPrev
-            && normalizePc (c.rootPitchClass) == normalizePc (prev->rootPitchClass + 1);
+            && normalizePc (c.rootPitchClass) == normalizePc (bassAnchorPitchClass (*prev) + 1);
         const bool matchNext = hasNext
-            && normalizePc (c.rootPitchClass) == normalizePc (next->rootPitchClass + 11);
+            && normalizePc (c.rootPitchClass) == normalizePc (bassAnchorPitchClass (*next) + 11);
 
         bool pass = false;
         if (hasPrev && hasNext)
@@ -390,7 +397,7 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
 
         // Descending: dim root == next root + 1 (requires next; prev irrelevant).
         const bool matchNextDesc = hasNext
-            && normalizePc (c.rootPitchClass) == normalizePc (next->rootPitchClass + 1);
+            && normalizePc (c.rootPitchClass) == normalizePc (bassAnchorPitchClass (*next) + 1);
         pass = pass || matchNextDesc;
 
         if (pass)

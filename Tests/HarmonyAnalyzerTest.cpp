@@ -272,6 +272,49 @@ public:
             expect (analysis[1].technique != NonDiatonicTechnique::PassingDiminished);
         }
 
+        beginTest ("PassingDiminished with slash chord: Dm7 - D#dim - C/E");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7,      -1 }); // Dm7
+            model.setChord (1, 0, Chord { 3, ChordQuality::Diminished, -1 }); // D#dim
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major,       4 }); // C/E
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::PassingDiminished);
+            expectEquals (analysis[1].label, juce::String ("Pass.Dim"));
+        }
+
+        beginTest ("PassingDiminished with slash chord: Dm7 - D#dim7 - C/E");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7,       -1 }); // Dm7
+            model.setChord (1, 0, Chord { 3, ChordQuality::Diminished7, -1 }); // D#dim7
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major,        4 }); // C/E
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::PassingDiminished);
+            expectEquals (analysis[1].label, juce::String ("Pass.Dim"));
+        }
+
+        beginTest ("PassingDiminished negative: Dm7 - D#dim - C (no slash) is not Pass.Dim");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7,      -1 }); // Dm7
+            model.setChord (1, 0, Chord { 3, ChordQuality::Diminished, -1 }); // D#dim
+            model.setChord (2, 0, Chord { 0, ChordQuality::Major,       -1 }); // C
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[1].technique != NonDiatonicTechnique::PassingDiminished);
+        }
+
         beginTest ("CommonToneDiminished: C - Cdim7 - C");
         {
             ProgressionModel model;
