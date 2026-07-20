@@ -1138,6 +1138,34 @@ public:
             expect (analysis[0].technique == NonDiatonicTechnique::NeapolitanSixth);
         }
 
+        beginTest ("Neapolitan: Bb -> Dm (iv) in A minor");
+        {
+            // The Neapolitan is a predominant; resolving to another predominant
+            // (iv) is idiomatic and must still read as a Neapolitan.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 10, ChordQuality::Major, -1 }); // Bb (bII)
+            model.setChord (1, 0, Chord { 2,  ChordQuality::Minor, -1 }); // Dm (iv)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::NeapolitanSixth);
+        }
+
+        beginTest ("Neapolitan: Bb -> C (III) in A minor");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 10, ChordQuality::Major, -1 }); // Bb (bII)
+            model.setChord (1, 0, Chord { 0,  ChordQuality::Major, -1 }); // C (III)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::NeapolitanSixth);
+        }
+
         beginTest ("Neapolitan regression: Bb7 stays TritoneSub, not Neapolitan");
         {
             // Dominant-quality bII is a tritone substitute, not a Neapolitan.
@@ -1152,27 +1180,65 @@ public:
         }
 
         //======================================================================
-        // Augmented sixth (Ger+6 vs bVI7 enharmonic split)
+        // Augmented sixths. In A minor the shared core is b6=F, 1=A, #4=D#;
+        // the fourth tone names the type (none / 2=B / b3=C).
         //======================================================================
-        beginTest ("AugmentedSixth: Ger+6 (F7/F) -> E in A minor");
+        beginTest ("ItalianSixth: F-A-D# -> E in A minor");
         {
-            // F7 = F A C Eb : b6 root, contains 1 (A) and #4 (Eb). Resolves to V.
+            // It+6 = b6, 1, #4 only. As a chord: F7 with the fifth omitted,
+            // giving F A Eb (Eb is D# enharmonically).
+            Chord it { 5, ChordQuality::Dominant7, -1 };
+            it.omitMask = Omit5;
+
             ProgressionModel model;
             model.setKey (aMinor);
             model.setNumBars (2);
-            model.setChord (0, 0, Chord { 5, ChordQuality::Dominant7, -1 }); // F7 (Ger+6)
+            model.setChord (0, 0, it);
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major, -1 }); // E (V)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::ItalianSixth);
+            expectEquals (analysis[0].label, juce::String ("It.Aug.6th"));
+        }
+
+        beginTest ("FrenchSixth: F-A-B-D# -> E in A minor");
+        {
+            // Fr+6 adds the 2nd (B). As a chord: F7b5 = F A B Eb.
+            Chord fr { 5, ChordQuality::Dominant7, -1 };
+            fr.fifthAlt = FifthAlt::Flat;
+
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, fr);
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major, -1 }); // E (V)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::FrenchSixth);
+            expectEquals (analysis[0].label, juce::String ("Fr.Aug.6th"));
+        }
+
+        beginTest ("GermanSixth: F7 (F-A-C-D#) -> E in A minor");
+        {
+            // Ger+6 adds the b3 (C). As a chord: plain F7 = F A C Eb.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Dominant7, -1 }); // F7
             model.setChord (1, 0, Chord { 4, ChordQuality::Major,     -1 }); // E (V)
 
             const auto analysis = HarmonyAnalyzer::analyzeAll (model);
             expect (! analysis[0].diatonic);
-            expect (analysis[0].technique == NonDiatonicTechnique::AugmentedSixth);
-            expectEquals (analysis[0].label, juce::String ("Aug.6th"));
+            expect (analysis[0].technique == NonDiatonicTechnique::GermanSixth);
+            expectEquals (analysis[0].label, juce::String ("Ger.Aug.6th"));
         }
 
-        beginTest ("AugmentedSixth split: same F7 -> Bb is NOT Aug.6th");
+        beginTest ("AugmentedSixth split: same F7 -> Bb is a secondary dominant");
         {
             // Identical chord, different target: resolving down a fifth makes it
-            // a secondary dominant (bVI7), not an augmented sixth.
+            // bVI7 rather than a German sixth. This is the enharmonic split.
             ProgressionModel model;
             model.setKey (aMinor);
             model.setNumBars (2);
@@ -1180,13 +1246,14 @@ public:
             model.setChord (1, 0, Chord { 10, ChordQuality::Major,     -1 }); // Bb
 
             const auto analysis = HarmonyAnalyzer::analyzeAll (model);
-            expect (analysis[0].technique != NonDiatonicTechnique::AugmentedSixth);
+            expect (analysis[0].technique != NonDiatonicTechnique::GermanSixth);
             expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
         }
 
-        beginTest ("AugmentedSixth: It+6 requires b6 in the bass");
+        beginTest ("AugmentedSixth negative: chord without b6 in the bass");
         {
-            // Same pitch classes but rooted elsewhere with no b6 bass: not a +6.
+            // C major (C E G) resolving to V has neither the b6 bass nor the #4,
+            // so it is not an augmented sixth of any type.
             ProgressionModel model;
             model.setKey (aMinor);
             model.setNumBars (2);
@@ -1194,7 +1261,9 @@ public:
             model.setChord (1, 0, Chord { 4, ChordQuality::Major, -1 }); // E (V)
 
             const auto analysis = HarmonyAnalyzer::analyzeAll (model);
-            expect (analysis[0].technique != NonDiatonicTechnique::AugmentedSixth);
+            expect (analysis[0].technique != NonDiatonicTechnique::ItalianSixth);
+            expect (analysis[0].technique != NonDiatonicTechnique::FrenchSixth);
+            expect (analysis[0].technique != NonDiatonicTechnique::GermanSixth);
         }
 
         //======================================================================
@@ -1283,6 +1352,7 @@ public:
             model.setChord (1, 0, Chord { 6, ChordQuality::Dominant7, -1 }); // F#7 (final)
 
             const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
             expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
         }
 

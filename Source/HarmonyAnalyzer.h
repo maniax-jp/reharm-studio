@@ -23,7 +23,9 @@ enum class NonDiatonicTechnique
     ChromaticApproach,     // same-quality chord a semitone from the next chord
     LineCliche,            // passing chord harmonizing a single chromatic voice line
     NeapolitanSixth,       // bII / bIImaj7, typically in first inversion (bII6)
-    AugmentedSixth,        // It+6 / Fr+6 / Ger+6 built on b6, resolving to V
+    ItalianSixth,          // It+6: b6, 1, #4 -- resolving to V
+    FrenchSixth,           // Fr+6: b6, 1, 2, #4 -- resolving to V
+    GermanSixth,           // Ger+6: b6, 1, b3, #4 -- resolving to V
     Unknown                // non-diatonic but no technique recognised
 };
 
