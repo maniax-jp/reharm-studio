@@ -216,47 +216,80 @@ bool matchesNeapolitan (const Chord& c,
     if (! next.has_value())
         return true;
 
-    // Classic resolutions: to V (often via a cadential 6-4) or straight to i.
+    // The Neapolitan is a predominant, so it is named by where it goes: to V
+    // (directly or through a cadential 6-4), to the tonic, or to another
+    // predominant -- iv, or III in a minor key. Anything further afield is
+    // better described as a plain borrowing and falls through to rule 9.
     const int nextOffset = rootOffset (*next, key);
-    return nextOffset == 7 || nextOffset == 0;
+    return nextOffset == 7   // V
+        || nextOffset == 0   // i
+        || nextOffset == 5   // iv
+        || (! key.isMajor && nextOffset == 3);  // III (relative major)
 }
 
 // Augmented sixth chords, detected by pitch content rather than spelling: the
 // model has no dedicated +6 quality, and b6 + #4 is enharmonically a dominant
 // 7th / augmented 6th pair.
 //
-// All three types share the b6 bass and the #4 (the augmented sixth above it):
-//   It+6 = b6, 1, #4        Fr+6 = b6, 1, 2, #4        Ger+6 = b6, 1, b3, #4
+// All three types share the b6 bass, the tonic, and the #4 (the augmented sixth
+// above the bass). The remaining tone names the type:
+//   It+6 = b6, 1, #4          (no fourth tone)
+//   Fr+6 = b6, 1, 2, #4       (adds the 2nd)
+//   Ger+6 = b6, 1, b3, #4     (adds the b3)
 // Ger+6 is enharmonically identical to bVI7, so the resolution target
 // disambiguates: a +6 resolves to V, whereas bVI7 as a secondary dominant would
 // resolve down a fifth to bII.
-bool matchesAugmentedSixth (const Chord& c,
-                            const std::optional<Chord>& next,
-                            const KeyContext& key)
+//
+// Returns None when the chord is not an augmented sixth.
+NonDiatonicTechnique augmentedSixthType (const Chord& c,
+                                         const std::optional<Chord>& next,
+                                         const KeyContext& key)
 {
     // Must resolve to the dominant -- this is what makes it a +6 rather than
     // an enharmonically identical bVI7.
     if (! next.has_value() || rootOffset (*next, key) != 7)
-        return false;
+        return NonDiatonicTechnique::None;
 
     const int tonic = key.tonicPitchClass;
-    const int flatSix = normalizePc (tonic + 8);
+    const int flatSix   = normalizePc (tonic + 8);
     const int sharpFour = normalizePc (tonic + 6);
+    const int second    = normalizePc (tonic + 2);
+    const int flatThree = normalizePc (tonic + 3);
 
     // The b6 must be in the bass (explicit slash bass, or the root itself).
     const int bass = c.hasBass() ? normalizePc (c.bassPitchClass)
                                  : normalizePc (c.rootPitchClass);
     if (bass != flatSix)
-        return false;
+        return NonDiatonicTechnique::None;
 
     std::set<int> tones;
     for (int pc : ChordModel::chordTonePitchClasses (c))
         tones.insert (normalizePc (pc));
 
     // b6 and #4 form the defining augmented sixth interval; 1 is always present.
-    return tones.count (flatSix) != 0
-        && tones.count (sharpFour) != 0
-        && tones.count (normalizePc (tonic)) != 0;
+    if (tones.count (flatSix) == 0
+        || tones.count (sharpFour) == 0
+        || tones.count (normalizePc (tonic)) == 0)
+        return NonDiatonicTechnique::None;
+
+    // The fourth tone names the type. Anything else above the core three (or a
+    // chord carrying both the 2nd and the b3) is not a textbook +6.
+    const bool hasSecond = tones.count (second) != 0;
+    const bool hasFlatThree = tones.count (flatThree) != 0;
+
+    if (hasSecond && hasFlatThree)
+        return NonDiatonicTechnique::None;
+
+    if (tones.size() == 3)
+        return NonDiatonicTechnique::ItalianSixth;
+
+    if (tones.size() == 4 && hasSecond)
+        return NonDiatonicTechnique::FrenchSixth;
+
+    if (tones.size() == 4 && hasFlatThree)
+        return NonDiatonicTechnique::GermanSixth;
+
+    return NonDiatonicTechnique::None;
 }
 
 // Minor-key extended diatonic: chords built on harmonic or melodic minor are
@@ -503,8 +536,16 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     // 2c. Augmented Sixth (It/Fr/Ger on b6, resolving to V).
     // Before the dominant-function rules: Ger+6 is enharmonically bVI7 and
     // would otherwise be taken as a secondary dominant or tritone sub.
-    if (matchesAugmentedSixth (c, next, key))
-        return { false, NonDiatonicTechnique::AugmentedSixth, "Aug.6th", {} };
+    {
+        const NonDiatonicTechnique aug = augmentedSixthType (c, next, key);
+
+        if (aug == NonDiatonicTechnique::ItalianSixth)
+            return { false, aug, "It.Aug.6th", {} };
+        if (aug == NonDiatonicTechnique::FrenchSixth)
+            return { false, aug, "Fr.Aug.6th", {} };
+        if (aug == NonDiatonicTechnique::GermanSixth)
+            return { false, aug, "Ger.Aug.6th", {} };
+    }
 
     // 2d. Neapolitan Sixth (bII / bIImaj7). Before the tritone-sub rule, which
     // also keys on the b2 degree; dominant-quality bII7 is left to that rule.
