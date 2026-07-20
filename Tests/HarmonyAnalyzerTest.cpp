@@ -460,7 +460,7 @@ public:
             expectEquals (analysis[1].label, juce::String ("Picardy"));
         }
 
-        beginTest ("Minor-key V7 ModalInterchange (E7 in Am)");
+        beginTest ("Minor-key V7 is harmonic-minor diatonic (E7 in Am)");
         {
             // E7 -> F (not tonic): harmonic-minor V7 path
             {
@@ -471,9 +471,9 @@ public:
                 model.setChord (1, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
 
                 const auto analysis = HarmonyAnalyzer::analyzeAll (model);
-                expect (! analysis[0].diatonic);
-                expect (analysis[0].technique == NonDiatonicTechnique::ModalInterchange);
-                expectEquals (analysis[0].label, juce::String ("V7"));
+                expect (analysis[0].diatonic);
+                expect (analysis[0].technique == NonDiatonicTechnique::None);
+                expect (analysis[0].derivation == MinorDerivation::HarmonicMinor);
                 expectEquals (analysis[0].borrowedScale, juce::String ("A Harmonic minor"));
             }
 
@@ -486,11 +486,56 @@ public:
                 model.setChord (1, 0, Chord { 9, ChordQuality::Minor,      -1 }); // Am
 
                 const auto analysis = HarmonyAnalyzer::analyzeAll (model);
-                expect (! analysis[0].diatonic);
-                expect (analysis[0].technique == NonDiatonicTechnique::ModalInterchange);
-                expectEquals (analysis[0].label, juce::String ("V7"));
+                expect (analysis[0].diatonic);
+                expect (analysis[0].technique == NonDiatonicTechnique::None);
+                expect (analysis[0].derivation == MinorDerivation::HarmonicMinor);
                 expectEquals (analysis[0].borrowedScale, juce::String ("A Harmonic minor"));
             }
+        }
+
+        beginTest ("Minor-key viio7 is harmonic-minor, not passing diminished");
+        {
+            // G#dim7 -> Am: previously mislabelled Pass.Dim by the chromatic rule.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 8, ChordQuality::Diminished7, -1 }); // G#dim7
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor,       -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::None);
+            expect (analysis[0].derivation == MinorDerivation::HarmonicMinor);
+            expectEquals (analysis[0].borrowedScale, juce::String ("A Harmonic minor"));
+        }
+
+        beginTest ("Minor-key IV major is melodic-minor derived (D in Am)");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Major, -1 }); // D
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor, -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::None);
+            expect (analysis[0].derivation == MinorDerivation::MelodicMinor);
+            expectEquals (analysis[0].borrowedScale, juce::String ("A Melodic minor"));
+        }
+
+        beginTest ("Natural-minor chords keep no derivation");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7, -1 }); // Dm7 (iv)
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor,  -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (analysis[0].derivation == MinorDerivation::None);
+            expect (analysis[0].borrowedScale.isEmpty());
         }
 
         beginTest ("detectPatterns: Two-Five-One Dm7-G7-C");
@@ -1061,6 +1106,197 @@ public:
 
             const auto analysis = HarmonyAnalyzer::analyzeAll (model);
             expect (analysis[0].technique != NonDiatonicTechnique::LineCliche);
+        }
+
+        //======================================================================
+        // Neapolitan sixth
+        //======================================================================
+        beginTest ("Neapolitan: Bb - E7 - Am in A minor");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 10, ChordQuality::Major,     -1 }); // Bb (bII)
+            model.setChord (1, 0, Chord { 4,  ChordQuality::Dominant7, -1 }); // E7 (V)
+            model.setChord (2, 0, Chord { 9,  ChordQuality::Minor,     -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::NeapolitanSixth);
+            expectEquals (analysis[0].label, juce::String ("Neapolitan"));
+        }
+
+        beginTest ("Neapolitan: bII6 (Bb/D) resolving to tonic in A minor");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 10, ChordQuality::Major, 2 }); // Bb/D
+            model.setChord (1, 0, Chord { 9,  ChordQuality::Minor, -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::NeapolitanSixth);
+        }
+
+        beginTest ("Neapolitan regression: Bb7 stays TritoneSub, not Neapolitan");
+        {
+            // Dominant-quality bII is a tritone substitute, not a Neapolitan.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 10, ChordQuality::Dominant7, -1 }); // Bb7
+            model.setChord (1, 0, Chord { 9,  ChordQuality::Minor,     -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::TritoneSubstitution);
+        }
+
+        //======================================================================
+        // Augmented sixth (Ger+6 vs bVI7 enharmonic split)
+        //======================================================================
+        beginTest ("AugmentedSixth: Ger+6 (F7/F) -> E in A minor");
+        {
+            // F7 = F A C Eb : b6 root, contains 1 (A) and #4 (Eb). Resolves to V.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Dominant7, -1 }); // F7 (Ger+6)
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major,     -1 }); // E (V)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::AugmentedSixth);
+            expectEquals (analysis[0].label, juce::String ("Aug.6th"));
+        }
+
+        beginTest ("AugmentedSixth split: same F7 -> Bb is NOT Aug.6th");
+        {
+            // Identical chord, different target: resolving down a fifth makes it
+            // a secondary dominant (bVI7), not an augmented sixth.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 5,  ChordQuality::Dominant7, -1 }); // F7
+            model.setChord (1, 0, Chord { 10, ChordQuality::Major,     -1 }); // Bb
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique != NonDiatonicTechnique::AugmentedSixth);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+        }
+
+        beginTest ("AugmentedSixth: It+6 requires b6 in the bass");
+        {
+            // Same pitch classes but rooted elsewhere with no b6 bass: not a +6.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+            model.setChord (1, 0, Chord { 4, ChordQuality::Major, -1 }); // E (V)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique != NonDiatonicTechnique::AugmentedSixth);
+        }
+
+        //======================================================================
+        // Minor-key techniques previously gated to major keys
+        //======================================================================
+        beginTest ("DoubleDominant in minor: B7 -> E7 in A minor");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 11, ChordQuality::Dominant7, -1 }); // B7 (II7)
+            model.setChord (1, 0, Chord { 4,  ChordQuality::Dominant7, -1 }); // E7 (V7)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::DoubleDominant);
+        }
+
+        beginTest ("Minor bVII7 (G7 -> Am in A minor) is plain diatonic");
+        {
+            // G7 = G B D F, entirely within A natural minor: it is a diatonic
+            // chord of the key, not a backdoor borrowing.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7 (bVII7)
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor,     -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::None);
+        }
+
+        beginTest ("BluesSeventh in minor: I7 not resolving down a fifth");
+        {
+            // A7 -> Am: dominant-quality tonic that does not resolve down a
+            // fifth, so it reads as a blues 7th rather than a secondary dominant.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7 (I7)
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor,     -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::BluesSeventh);
+        }
+
+        beginTest ("BluesSeventh regression: A7 -> Dm7 stays Sec.Dom in A minor");
+        {
+            // Resolving down a fifth to iv makes it a secondary dominant.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (1, 0, Chord { 2, ChordQuality::Minor7,    -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+        }
+
+        beginTest ("Minor borrowed from parallel major: C#m7 (III) in A minor");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 1, ChordQuality::Minor7, -1 }); // C#m7 (III of A major)
+            model.setChord (1, 0, Chord { 9, ChordQuality::Minor,  -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::ModalInterchange);
+            expectEquals (analysis[0].borrowedScale, juce::String ("A Ionian"));
+        }
+
+        //======================================================================
+        // Secondary dominant targets on the extended minor scale
+        //======================================================================
+        beginTest ("SecondaryDominant: final F#7 in A minor targets B (extended)");
+        {
+            // F#7 -> B: B is the 2nd degree, valid in every minor scale.
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Minor,     -1 }); // Am
+            model.setChord (1, 0, Chord { 6, ChordQuality::Dominant7, -1 }); // F#7 (final)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+        }
+
+        beginTest ("SecondaryDominant: final A7 in A minor targets D (iv)");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Minor,     -1 }); // Am
+            model.setChord (1, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7 (final)
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
         }
     }
 };

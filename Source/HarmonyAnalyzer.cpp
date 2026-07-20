@@ -159,6 +159,133 @@ bool fitsScale (const Chord& c, int tonic, const int* intervals, int count)
     return true;
 }
 
+// Line cliche: a passing chord harmonizing a single chromatic voice line -- one
+// voice moves prev -> x -> next by semitone in the same direction, while every
+// other chord tone is shared with both neighbours.
+bool matchesLineCliche (const Chord& c,
+                        const std::optional<Chord>& prev,
+                        const std::optional<Chord>& next)
+{
+    if (! prev.has_value() || ! next.has_value())
+        return false;
+
+    const auto currentTones = ChordModel::chordTonePitchClasses (c);
+
+    if (currentTones.size() < 3)
+        return false;
+
+    std::set<int> P, C, N;
+    for (int pc : ChordModel::chordTonePitchClasses (*prev)) P.insert (normalizePc (pc));
+    for (int pc : currentTones)                              C.insert (normalizePc (pc));
+    for (int pc : ChordModel::chordTonePitchClasses (*next)) N.insert (normalizePc (pc));
+
+    std::vector<int> diffP, diffN;
+    std::set_difference (C.begin(), C.end(), P.begin(), P.end(), std::back_inserter (diffP));
+    std::set_difference (C.begin(), C.end(), N.begin(), N.end(), std::back_inserter (diffN));
+
+    if (diffP.size() != 1 || diffN.size() != 1 || diffP[0] != diffN[0])
+        return false;
+
+    const int x = diffP[0];
+
+    for (int d : { 1, -1 })
+    {
+        if (P.count (normalizePc (x - d)) != 0 && N.count (normalizePc (x + d)) != 0)
+            return true;
+    }
+
+    return false;
+}
+
+// Neapolitan sixth: the major triad (or maj7) on b2, most often heard in first
+// inversion (bII6, i.e. a b2 chord over the 4th degree) and resolving towards
+// the dominant or the tonic. Dominant-quality b2 chords are excluded -- bII7 is
+// a tritone substitute and is handled by that rule instead.
+bool matchesNeapolitan (const Chord& c,
+                        const std::optional<Chord>& next,
+                        const KeyContext& key)
+{
+    if (rootOffset (c, key) != 1)
+        return false;
+
+    if (c.quality != ChordQuality::Major && c.quality != ChordQuality::Major7)
+        return false;
+
+    // No following chord: accept on colour alone (the b2 major triad is not
+    // diatonic to either mode, so there is no competing reading).
+    if (! next.has_value())
+        return true;
+
+    // Classic resolutions: to V (often via a cadential 6-4) or straight to i.
+    const int nextOffset = rootOffset (*next, key);
+    return nextOffset == 7 || nextOffset == 0;
+}
+
+// Augmented sixth chords, detected by pitch content rather than spelling: the
+// model has no dedicated +6 quality, and b6 + #4 is enharmonically a dominant
+// 7th / augmented 6th pair.
+//
+// All three types share the b6 bass and the #4 (the augmented sixth above it):
+//   It+6 = b6, 1, #4        Fr+6 = b6, 1, 2, #4        Ger+6 = b6, 1, b3, #4
+// Ger+6 is enharmonically identical to bVI7, so the resolution target
+// disambiguates: a +6 resolves to V, whereas bVI7 as a secondary dominant would
+// resolve down a fifth to bII.
+bool matchesAugmentedSixth (const Chord& c,
+                            const std::optional<Chord>& next,
+                            const KeyContext& key)
+{
+    // Must resolve to the dominant -- this is what makes it a +6 rather than
+    // an enharmonically identical bVI7.
+    if (! next.has_value() || rootOffset (*next, key) != 7)
+        return false;
+
+    const int tonic = key.tonicPitchClass;
+    const int flatSix = normalizePc (tonic + 8);
+    const int sharpFour = normalizePc (tonic + 6);
+
+    // The b6 must be in the bass (explicit slash bass, or the root itself).
+    const int bass = c.hasBass() ? normalizePc (c.bassPitchClass)
+                                 : normalizePc (c.rootPitchClass);
+    if (bass != flatSix)
+        return false;
+
+    std::set<int> tones;
+    for (int pc : ChordModel::chordTonePitchClasses (c))
+        tones.insert (normalizePc (pc));
+
+    // b6 and #4 form the defining augmented sixth interval; 1 is always present.
+    return tones.count (flatSix) != 0
+        && tones.count (sharpFour) != 0
+        && tones.count (normalizePc (tonic)) != 0;
+}
+
+// Minor-key extended diatonic: chords built on harmonic or melodic minor are
+// part of the key's normal vocabulary, not borrowings. They stay diatonic; the
+// derivation is recorded so the UI can show a subdued origin badge.
+//
+// Only chords that actually use the raised degree are reported: a chord that
+// already fits natural minor is plain diatonic and never reaches here, and one
+// that fits both raised scales is attributed to harmonic minor (the more
+// common source for functional harmony).
+MinorDerivation minorDerivationFor (const Chord& c, const KeyContext& key)
+{
+    static const int harmonicMinor[] = { 0, 2, 3, 5, 7, 8, 11 };
+    static const int melodicMinor[]  = { 0, 2, 3, 5, 7, 9, 11 };
+
+    if (key.isMajor)
+        return MinorDerivation::None;
+
+    const int tonic = key.tonicPitchClass;
+
+    if (fitsScale (c, tonic, harmonicMinor, 7))
+        return MinorDerivation::HarmonicMinor;
+
+    if (fitsScale (c, tonic, melodicMinor, 7))
+        return MinorDerivation::MelodicMinor;
+
+    return MinorDerivation::None;
+}
+
 struct ModeDef
 {
     const char* name;
@@ -226,6 +353,29 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
                             int realIndex,
                             const KeyContext& key);
 
+// Is `pitchClass` a usable degree of the key, i.e. a plausible target for a
+// secondary dominant? Minor keys use the union of natural, harmonic and melodic
+// minor, so that V (raised 7th's dominant), IV major and the leading tone all
+// count -- V7/V in a minor key is common and must not be rejected because the
+// natural minor lacks those degrees.
+bool isKeyDegree (int pitchClass, const KeyContext& key)
+{
+    static const int majorScale[]   = { 0, 2, 4, 5, 7, 9, 11 };
+    // Natural + harmonic + melodic minor combined: 1 2 b3 4 5 b6 6 b7 7
+    static const int minorScale[]   = { 0, 2, 3, 5, 7, 8, 9, 10, 11 };
+
+    const int* scale = key.isMajor ? majorScale : minorScale;
+    const int count  = key.isMajor ? 7 : 9;
+
+    for (int i = 0; i < count; ++i)
+    {
+        if (normalizePc (key.tonicPitchClass + scale[i]) == normalizePc (pitchClass))
+            return true;
+    }
+
+    return false;
+}
+
 bool matchesSecondaryDominant (const Chord& c,
                                const std::optional<Chord>& next,
                                const KeyContext& key)
@@ -244,24 +394,14 @@ bool matchesSecondaryDominant (const Chord& c,
         if (normalizePc (targetRoot - key.tonicPitchClass) == 0)
             return false;
 
-        // Target must be a diatonic scale degree.
-        static const std::array<int, 7> majorScale = { 0, 2, 4, 5, 7, 9, 11 };
-        static const std::array<int, 7> minorScale = { 0, 2, 3, 5, 7, 8, 10 };
-
-        const int* scale = key.isMajor ? majorScale.data() : minorScale.data();
-
-        for (int i = 0; i < 7; ++i)
-        {
-            if (normalizePc (key.tonicPitchClass + scale[i]) == targetRoot)
-                return true;
-        }
-
-        return false;
+        // Target must be a degree of the key.
+        return isKeyDegree (targetRoot, key);
     }
 
     const int nextFunctionalRoot = functionalRootPitchClass (*next);
 
-    // Case A: resolve down a perfect fifth (not to tonic).
+    // Case A: resolve down a perfect fifth (not to tonic). The target need not
+    // be diatonic -- V7/bIII and V7/bVII resolve onto borrowed chords.
     if (normalizePc (functionalRoot + 5) == nextFunctionalRoot
         && normalizePc (nextFunctionalRoot - key.tonicPitchClass) != 0)
         return true;
@@ -320,7 +460,7 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     const auto next = nextRealChord (real, realIndex);
     const auto prev = prevRealChord (real, realIndex);
 
-    // 1. Diatonic
+    // 1. Diatonic (natural minor / major)
     if (ChordModel::isDiatonic (c, key))
         return { true, NonDiatonicTechnique::None, {}, {} };
 
@@ -333,20 +473,52 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         return { false, NonDiatonicTechnique::PicardyThird, "Picardy", {} };
     }
 
-    // 3. Double Dominant (major key II7)
-    if (key.isMajor && isDominantQuality (c.quality) && offset == 2)
-        return { false, NonDiatonicTechnique::DoubleDominant, "Dbl.Dom", {} };
-
-    // 4-pre. Minor-key V7 from harmonic minor (before secondary dominant)
-    if (! key.isMajor && offset == 7 && isDominantQuality (c.quality))
+    // 2b. Minor-key extended diatonic (harmonic / melodic minor).
+    // Runs before the technique rules so that the key's own vocabulary --
+    // V7, viio7, IV major, iim7b5 -- is not mislabelled as a passing
+    // diminished, secondary dominant or modal interchange.
+    //
+    // A chord that harmonizes a chromatic voice line is excluded: chords like
+    // CmM7 in C minor fit harmonic minor, but when the neighbours make the
+    // line audible (Cm - CmM7 - Cm7) the line reading is the meaningful one,
+    // so it is left to rule 8c.
+    if (! key.isMajor && ! matchesLineCliche (c, prev, next))
     {
-        ChordAnalysis a;
-        a.diatonic = false;
-        a.technique = NonDiatonicTechnique::ModalInterchange;
-        a.label = "V7";
-        a.borrowedScale = ChordModel::pitchClassName (key.tonicPitchClass) + " Harmonic minor";
-        return a;
+        const MinorDerivation derivation = minorDerivationFor (c, key);
+
+        if (derivation != MinorDerivation::None)
+        {
+            ChordAnalysis a;
+            a.diatonic = true;
+            a.technique = NonDiatonicTechnique::None;
+            a.borrowedScale = ChordModel::pitchClassName (key.tonicPitchClass)
+                            + (derivation == MinorDerivation::HarmonicMinor
+                                   ? " Harmonic minor"
+                                   : " Melodic minor");
+            a.derivation = derivation;
+            return a;
+        }
     }
+
+    // 2c. Augmented Sixth (It/Fr/Ger on b6, resolving to V).
+    // Before the dominant-function rules: Ger+6 is enharmonically bVI7 and
+    // would otherwise be taken as a secondary dominant or tritone sub.
+    if (matchesAugmentedSixth (c, next, key))
+        return { false, NonDiatonicTechnique::AugmentedSixth, "Aug.6th", {} };
+
+    // 2d. Neapolitan Sixth (bII / bIImaj7). Before the tritone-sub rule, which
+    // also keys on the b2 degree; dominant-quality bII7 is left to that rule.
+    if (matchesNeapolitan (c, next, key))
+        return { false, NonDiatonicTechnique::NeapolitanSixth, "Neapolitan", {} };
+
+    // 3. Double Dominant (II7). In a major key the II7 colour alone is enough;
+    // in a minor key the dominant is itself an altered chord, so require the
+    // chord to actually land on V before calling it a double dominant --
+    // otherwise a lone II7 is better described as a secondary dominant.
+    if (isDominantQuality (c.quality) && offset == 2
+        && (key.isMajor
+            || (next.has_value() && rootOffset (*next, key) == 7)))
+        return { false, NonDiatonicTechnique::DoubleDominant, "Dbl.Dom", {} };
 
     // 4. Secondary Dominant
     if (matchesSecondaryDominant (c, next, key))
@@ -361,7 +533,9 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     if (matchesTritoneSubstitution (c, next, key))
         return { false, NonDiatonicTechnique::TritoneSubstitution, "Tritone Sub", {} };
 
-    // 5b. Backdoor Dominant (bVII7 -> I)
+    // 5b. Backdoor Dominant (bVII7 -> I). Major keys only by nature: in a minor
+    // key bVII7 is built entirely from natural-minor degrees, so it is already
+    // diatonic and never reaches this point.
     if (key.isMajor && isDominantQuality (c.quality) && offset == 10 && next.has_value()
         && normalizePc (functionalRootPitchClass (*next) - key.tonicPitchClass) == 0
         && (next->quality == ChordQuality::Major
@@ -371,8 +545,9 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         return { false, NonDiatonicTechnique::BackdoorDominant, "Backdoor (bVII7)", {} };
     }
 
-    // 5c. Blues Seventh (non-functional I7 / IV7)
-    if (key.isMajor && isDominantQuality (c.quality) && (offset == 0 || offset == 5))
+    // 5c. Blues Seventh (non-functional I7 / IV7), in either mode: a minor
+    // blues uses the same dominant-quality tonic and subdominant.
+    if (isDominantQuality (c.quality) && (offset == 0 || offset == 5))
         return { false, NonDiatonicTechnique::BluesSeventh, "Blues 7th", {} };
 
     // 6. Passing Diminished
@@ -425,7 +600,8 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         }
     }
 
-    // 8. Subdominant Minor (major key only)
+    // 8. Subdominant Minor (major key): IVm, bVI, bVII, IIm7b5 from the
+    // parallel minor.
     if (key.isMajor)
     {
         bool isSdm = false;
@@ -456,6 +632,35 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
             return a;
         }
     }
+    else
+    {
+        // Minor key: chords borrowed from the parallel major. The raised-degree
+        // chords (V7, viio7, IV major) are already handled as extended diatonic
+        // by rule 2b, so what remains are the major-mode 3rd, 6th and 7th
+        // degrees -- III minor, VI minor and the major-mode VII.
+        bool isBorrowed = false;
+
+        if (offset == 4
+            && (c.quality == ChordQuality::Minor
+                || c.quality == ChordQuality::Minor7))
+            isBorrowed = true;
+        else if (offset == 9
+                 && (c.quality == ChordQuality::Minor
+                     || c.quality == ChordQuality::Minor7))
+            isBorrowed = true;
+        else if (offset == 11 && c.quality == ChordQuality::Minor7Flat5)
+            isBorrowed = true;
+
+        if (isBorrowed)
+        {
+            ChordAnalysis a;
+            a.diatonic = false;
+            a.technique = NonDiatonicTechnique::ModalInterchange;
+            a.label = "M.I.";
+            a.borrowedScale = ChordModel::pitchClassName (key.tonicPitchClass) + " Ionian";
+            return a;
+        }
+    }
 
     // 8b. Chromatic Approach (same-quality chord a semitone above/below next)
     if (next.has_value() && c.quality == next->quality
@@ -465,38 +670,9 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
         return { false, NonDiatonicTechnique::ChromaticApproach, "Chr.App", {} };
     }
 
-    // 8c. Line Cliche (passing chord harmonizing a single chromatic voice line:
-    // one voice moves prev -> x -> next by semitone in the same direction, while
-    // every other chord tone is shared with both neighbours).
-    if (prev.has_value() && next.has_value())
-    {
-        const auto currentTones = ChordModel::chordTonePitchClasses (c);
-
-        if (currentTones.size() >= 3)
-        {
-            std::set<int> P, C, N;
-            for (int pc : ChordModel::chordTonePitchClasses (*prev)) P.insert (normalizePc (pc));
-            for (int pc : currentTones)                              C.insert (normalizePc (pc));
-            for (int pc : ChordModel::chordTonePitchClasses (*next)) N.insert (normalizePc (pc));
-
-            std::vector<int> diffP, diffN;
-            std::set_difference (C.begin(), C.end(), P.begin(), P.end(), std::back_inserter (diffP));
-            std::set_difference (C.begin(), C.end(), N.begin(), N.end(), std::back_inserter (diffN));
-
-            if (diffP.size() == 1 && diffN.size() == 1 && diffP[0] == diffN[0])
-            {
-                const int x = diffP[0];
-
-                for (int d : { 1, -1 })
-                {
-                    if (P.count (normalizePc (x - d)) != 0 && N.count (normalizePc (x + d)) != 0)
-                    {
-                        return { false, NonDiatonicTechnique::LineCliche, "Line Cliche", {} };
-                    }
-                }
-            }
-        }
-    }
+    // 8c. Line Cliche
+    if (matchesLineCliche (c, prev, next))
+        return { false, NonDiatonicTechnique::LineCliche, "Line Cliche", {} };
 
     // 9. Modal Interchange
     {

@@ -22,7 +22,17 @@ enum class NonDiatonicTechnique
     BackdoorDominant,      // bVII7 resolving to I
     ChromaticApproach,     // same-quality chord a semitone from the next chord
     LineCliche,            // passing chord harmonizing a single chromatic voice line
+    NeapolitanSixth,       // bII / bIImaj7, typically in first inversion (bII6)
+    AugmentedSixth,        // It+6 / Fr+6 / Ger+6 built on b6, resolving to V
     Unknown                // non-diatonic but no technique recognised
+};
+
+/** Which parent scale a minor-key diatonic chord comes from. */
+enum class MinorDerivation
+{
+    None = 0,       // not applicable (major key, or natural minor)
+    HarmonicMinor,  // V7, viio7, bIII+ etc.
+    MelodicMinor    // IV (major), ii7, VI7 etc.
 };
 
 /** Analysis result for a single slot. */
@@ -32,6 +42,11 @@ struct ChordAnalysis
     NonDiatonicTechnique technique = NonDiatonicTechnique::None;
     juce::String label;           // short badge text, e.g. "Sec.Dom (V7/VI)" / "SDM"
     juce::String borrowedScale;   // for ModalInterchange: e.g. "C Dorian"; empty otherwise
+
+    /** For minor keys: set when the chord is diatonic to harmonic/melodic minor
+        rather than natural minor. `diatonic` stays true in that case; this only
+        records the derivation so the UI can show a subdued origin badge. */
+    MinorDerivation derivation = MinorDerivation::None;
 };
 
 /** A named pattern found in the progression (indices into flatten()). */
