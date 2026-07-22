@@ -18,7 +18,7 @@ help:
 	@echo ""
 	@echo "  make app                    アプリ本体をビルド (build/, Debug)"
 	@echo "  make test                   テストを build/ でビルド・実行（正規）"
-	@echo "  make release-check          リリース前の最終テスト（build/ で実施。これが唯一の正式検証）"
+	@echo "  make release-check          リリース前の最終検証（build/ でアプリ本体ビルド+全テスト。これが唯一の正式検証）"
 	@echo "  make agent-test AGENT=codex エージェント用サンドボックスでテスト (.agent-builds/codex)"
 	@echo "  make agent-test AGENT=grok  同上 (.agent-builds/grok)"
 	@echo "  make clean-agents           サンドボックスを全削除"
@@ -35,9 +35,9 @@ test:
 	cmake --build --preset debug-tests --target ReharmStudioTests --parallel
 	./$(CANONICAL_TESTS)
 
-release-check: test
+release-check: app test
 	@echo ""
-	@echo "release-check OK — build/ (正規ビルドディレクトリ) で全テスト通過。"
+	@echo "release-check OK — build/ (正規ビルドディレクトリ) でアプリ本体をビルドし、全テスト通過。"
 
 agent-test:
 	@test -n "$(AGENT)" || { echo "使い方: make agent-test AGENT=codex|grok"; exit 1; }
