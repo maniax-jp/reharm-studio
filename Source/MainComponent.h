@@ -13,6 +13,7 @@
 #include "TransportBar.h"
 #include "StateStore.h"
 #include "UndoHistory.h"
+#include "PlaybackBuilder.h"
 
 class PluginEditorWindow : public juce::DocumentWindow
 {
@@ -90,6 +91,7 @@ private:
     reharm::UndoHistory undoHistory;
     bool restoringHistory = false;
     bool isPlaying = false;
+    std::vector<int> currentDisplayMap;
 
     reharm::StateStore stateStore { reharm::StateStore::createDefault() };
     reharm::StateStore::SessionData sessionData;

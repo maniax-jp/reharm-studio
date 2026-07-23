@@ -84,6 +84,44 @@ BarSubdivision subdivisionFromInt (int i) noexcept
         return BarSubdivision::Four;
     return BarSubdivision::One;
 }
+
+juce::String arpPatternToString (ArpPattern p)
+{
+    switch (p)
+    {
+        case ArpPattern::Up:     return "up";
+        case ArpPattern::Down:   return "down";
+        case ArpPattern::UpDown: return "updown";
+        case ArpPattern::Off:
+        default:                 return "off";
+    }
+}
+
+ArpPattern arpPatternFromString (const juce::String& s)
+{
+    if (s == "up")     return ArpPattern::Up;
+    if (s == "down")   return ArpPattern::Down;
+    if (s == "updown") return ArpPattern::UpDown;
+    return ArpPattern::Off;
+}
+
+juce::String arpRateToString (ArpRate r)
+{
+    switch (r)
+    {
+        case ArpRate::Quarter:   return "4";
+        case ArpRate::Sixteenth: return "16";
+        case ArpRate::Eighth:
+        default:                 return "8";
+    }
+}
+
+ArpRate arpRateFromString (const juce::String& s)
+{
+    if (s == "4")  return ArpRate::Quarter;
+    if (s == "16") return ArpRate::Sixteenth;
+    return ArpRate::Eighth;
+}
 } // namespace
 
 StateStore::StateStore (const juce::File& baseDirectory)
@@ -109,6 +147,11 @@ juce::var StateStore::serialize (const ProgressionModel& model, const SessionDat
         root->setProperty ("volume", s.volume);
 
     root->setProperty ("voicing", s.voicingClose ? "close" : "open");
+
+    auto* arpObj = new juce::DynamicObject();
+    arpObj->setProperty ("pattern", arpPatternToString (s.arpPattern));
+    arpObj->setProperty ("rate", arpRateToString (s.arpRate));
+    root->setProperty ("arp", juce::var (arpObj));
 
     auto* keyObj = new juce::DynamicObject();
     keyObj->setProperty ("tonic", model.getKey().tonicPitchClass);
@@ -199,6 +242,12 @@ bool StateStore::deserialize (const juce::var& v, ProgressionModel& model, Sessi
     const auto voicingStr = v.getProperty ("voicing", juce::var()).toString();
     const bool voicingClose = (voicingStr != "open");
 
+    const auto arpVar = v.getProperty ("arp", juce::var());
+    const auto arpPatternStr = arpVar.getProperty ("pattern", juce::var()).toString();
+    const auto arpRateStr = arpVar.getProperty ("rate", juce::var()).toString();
+    const ArpPattern arpPattern = arpPatternFromString (arpPatternStr);
+    const ArpRate arpRate = arpRateFromString (arpRateStr);
+
     const auto keyVar = v.getProperty ("key", juce::var());
     int tonic = static_cast<int> (keyVar.getProperty ("tonic", 0));
     if (tonic < 0 || tonic > 11)
@@ -227,6 +276,8 @@ bool StateStore::deserialize (const juce::var& v, ProgressionModel& model, Sessi
     s.bpm = bpm;
     s.volume = static_cast<float> (volume);
     s.voicingClose = voicingClose;
+    s.arpPattern = arpPattern;
+    s.arpRate = arpRate;
 
     const auto pluginVar = v.getProperty ("plugin", juce::var());
     if (pluginVar.isObject())

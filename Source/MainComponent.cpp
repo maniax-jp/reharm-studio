@@ -67,6 +67,23 @@ MainComponent::MainComponent()
     headerBar.onSaveRequested = [this] { promptSaveUserPreset(); };
     headerBar.onUserPresetSelected = [this] (const juce::String& name) { loadUserPreset (name); };
 
+    headerBar.onPlayStyleChanged = [this] (reharm::ArpPattern p)
+    {
+        display.arpPattern = p;
+        sessionData.arpPattern = p;          // package A autosave picks this up
+        if (isPlaying)
+            pushChordDataToEngine();
+        markSessionDirty();
+    };
+    headerBar.onArpRateChanged = [this] (reharm::ArpRate r)
+    {
+        display.arpRate = r;
+        sessionData.arpRate = r;
+        if (isPlaying)
+            pushChordDataToEngine();
+        markSessionDirty();
+    };
+
     sequencerView.onCellSelected = [this] (int bar, int slot)
     {
         display.selectedBar = bar;
@@ -103,6 +120,10 @@ MainComponent::MainComponent()
         display.voicingStyle = sessionData.voicingClose ? reharm::Voicing::Style::Close
                                                         : reharm::Voicing::Style::Open;
         headerBar.setVoicingClose (sessionData.voicingClose);
+        display.arpPattern = sessionData.arpPattern;
+        display.arpRate = sessionData.arpRate;
+        headerBar.setPlayStyle (sessionData.arpPattern);
+        headerBar.setArpRate (sessionData.arpRate);
         transportBar.setBpm (sessionData.bpm);
         transportBar.setVolume (sessionData.volume);
         audioEngine->setBpm (sessionData.bpm);
@@ -426,10 +447,16 @@ void MainComponent::loadUserPreset (const juce::String& name)
         // Only the musical fields are applied (plugin/volume are not in the preset).
         sessionData.bpm = loaded.bpm;
         sessionData.voicingClose = loaded.voicingClose;
+        sessionData.arpPattern = loaded.arpPattern;
+        sessionData.arpRate = loaded.arpRate;
         display.voicingStyle = loaded.voicingClose ? reharm::Voicing::Style::Close
                                                    : reharm::Voicing::Style::Open;
+        display.arpPattern = loaded.arpPattern;
+        display.arpRate = loaded.arpRate;
         headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
         headerBar.setVoicingClose (loaded.voicingClose);
+        headerBar.setPlayStyle (loaded.arpPattern);
+        headerBar.setArpRate (loaded.arpRate);
         transportBar.setBpm (loaded.bpm);
         audioEngine->setBpm (loaded.bpm);
         lastUserPresetName = name;
@@ -441,29 +468,9 @@ void MainComponent::loadUserPreset (const juce::String& name)
 
 void MainComponent::pushChordDataToEngine()
 {
-    auto flat = model.flatten();
-
-    // Trim trailing rests so playback loops right after the last populated slot.
-    // Interior rests (followed by a chord later) are preserved.
-    while (! flat.empty() && ! flat.back().chord.has_value())
-        flat.pop_back();
-
-    std::vector<std::vector<int>> notes;
-
-    std::vector<double> beats;
-    notes.reserve (flat.size());
-    beats.reserve (flat.size());
-
-    for (const auto& fc : flat)
-    {
-        beats.push_back (fc.beats);
-        if (fc.chord.has_value())
-            notes.push_back (reharm::Voicing::midiNotes (*fc.chord, display.voicingStyle));
-        else
-            notes.emplace_back(); // rest: empty note list
-    }
-
-    auto data = std::make_shared<ChordData> (std::move (notes), std::move (beats));
+    reharm::PlaybackSettings settings { display.voicingStyle, display.arpPattern, display.arpRate };
+    auto data = reharm::PlaybackBuilder::build (model, settings);
+    currentDisplayMap = data->displayIndices;
     audioEngine->setChordData (data);
 }
 
@@ -496,7 +503,14 @@ void MainComponent::timerCallback()
     if (isPlaying)
     {
         const int slot = audioEngine->getCurrentPlayingSlot();
-        sequencerView.setPlayingFlatIndex (slot);
+        int flatIndex = -1;
+        if (slot >= 0)
+        {
+            if (slot < (int) currentDisplayMap.size())
+                flatIndex = currentDisplayMap[(size_t) slot];
+            // Out of map range (engine briefly still playing stale data) -> -1 = no highlight.
+        }
+        sequencerView.setPlayingFlatIndex (flatIndex);
     }
     else
     {

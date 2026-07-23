@@ -2,6 +2,7 @@
 
 #include <juce_core/juce_core.h>
 #include "ProgressionModel.h"
+#include "PlaybackSettings.h"
 
 namespace reharm
 {
@@ -29,6 +30,8 @@ public:
         juce::String pluginPath;           // empty = no plugin
         juce::String pluginName;
         juce::String pluginStateB64;       // Base64; empty = no state
+        ArpPattern arpPattern = ArpPattern::Off;
+        ArpRate arpRate = ArpRate::Eighth;
     };
 
     // ---- Pure serialization (static, unit-test target) ----

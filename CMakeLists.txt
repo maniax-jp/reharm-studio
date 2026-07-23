@@ -72,6 +72,7 @@ target_sources(ReharmStudio PRIVATE
     Source/ChordEditorPanel.cpp
     Source/TransportBar.cpp
     Source/StateStore.cpp
+    Source/PlaybackBuilder.cpp
 )
 
 reharm_apply_common_definitions(ReharmStudio)
@@ -111,11 +112,13 @@ target_sources(ReharmStudioTests PRIVATE
     Tests/HarmonyAnalyzerTest.cpp
     Tests/StateStoreTest.cpp
     Tests/UndoHistoryTest.cpp
+    Tests/PlaybackBuilderTest.cpp
     Source/AudioEngine.cpp
     Source/ChordModel.cpp
     Source/ProgressionModel.cpp
     Source/HarmonyAnalyzer.cpp
     Source/StateStore.cpp
+    Source/PlaybackBuilder.cpp
 )
 
 reharm_apply_common_definitions(ReharmStudioTests)
