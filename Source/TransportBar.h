@@ -26,6 +26,29 @@ private:
 };
 
 /**
+ * Draggable "MIDI" badge: dragging it out of the app exports the current
+ * progression as a .mid file (drag & drop into a DAW).
+ */
+class MidiDragBadge : public juce::Component
+{
+public:
+    MidiDragBadge();
+
+    /** Returns the .mid file to drag, or an invalid/nonexistent File to cancel. */
+    std::function<juce::File()> onPrepareDragFile;
+
+    void paint (juce::Graphics& g) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
+
+private:
+    bool dragStarted = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiDragBadge)
+};
+
+/**
  * Transport: play/stop, BPM, volume, VST3 load + plugin name.
  */
 class TransportBar : public juce::Component
@@ -44,6 +67,7 @@ public:
     std::function<void (float volume01)> onVolumeChanged;
     std::function<void()> onLoadPlugin;
     std::function<void()> onOpenPluginEditor;
+    std::function<juce::File()> onPrepareMidiDragFile;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -56,6 +80,7 @@ private:
     juce::Label volumeLabel;
     juce::TextButton loadButton { "Load VST3" };
     juce::TextButton pluginNameButton { "No Plugin" };
+    MidiDragBadge midiBadge;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TransportBar)
 };

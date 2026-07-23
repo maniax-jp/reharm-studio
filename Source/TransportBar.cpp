@@ -52,6 +52,68 @@ void PlayStopButton::mouseDown (const juce::MouseEvent&)
 }
 
 //==============================================================================
+MidiDragBadge::MidiDragBadge()
+{
+    setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+}
+
+void MidiDragBadge::paint (juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat();
+
+    g.setColour (theme::surfaceHi);
+    g.fillRoundedRectangle (bounds, 6.0f);
+    g.setColour (theme::border);
+    g.drawRoundedRectangle (bounds.reduced (0.5f), 6.0f, 1.0f);
+
+    // Small eighth-note glyph on the left: stem + flag + notehead.
+    const float glyphH = bounds.getHeight() * 0.55f;
+    const float stemX = bounds.getX() + 10.0f;
+    const float stemTop = bounds.getCentreY() - glyphH * 0.5f;
+    const float stemBottom = bounds.getCentreY() + glyphH * 0.5f;
+    const float noteD = glyphH * 0.34f;
+
+    g.setColour (theme::accent);
+    g.fillRect (juce::Rectangle<float> (stemX - 1.0f, stemTop, 2.0f, glyphH));
+    g.fillEllipse (stemX - noteD, stemBottom - noteD * 0.5f, noteD, noteD);
+
+    juce::Path flag;
+    flag.addTriangle (stemX, stemTop,
+                      stemX, stemTop + glyphH * 0.4f,
+                      stemX + glyphH * 0.3f, stemTop + glyphH * 0.15f);
+    g.fillPath (flag);
+
+    g.setColour (theme::text);
+    g.setFont (theme::font (12.0f, true));
+    auto textArea = bounds.withTrimmedLeft (glyphH * 0.5f + 14.0f);
+    g.drawText ("MIDI", textArea, juce::Justification::centredLeft);
+}
+
+void MidiDragBadge::mouseDown (const juce::MouseEvent&)
+{
+    dragStarted = false;
+}
+
+void MidiDragBadge::mouseDrag (const juce::MouseEvent& e)
+{
+    if (dragStarted || e.getDistanceFromDragStart() < 6)
+        return;
+    dragStarted = true;
+    if (onPrepareDragFile == nullptr)
+        return;
+    const juce::File f = onPrepareDragFile();
+    if (! f.existsAsFile())
+        return;
+    juce::DragAndDropContainer::performExternalDragDropOfFiles (
+        juce::StringArray { f.getFullPathName() }, /*canMoveFiles*/ false, this, nullptr);
+}
+
+void MidiDragBadge::mouseUp (const juce::MouseEvent&)
+{
+    dragStarted = false;
+}
+
+//==============================================================================
 TransportBar::TransportBar()
 {
     playStop.onClick = [this]
@@ -113,6 +175,9 @@ TransportBar::TransportBar()
             onOpenPluginEditor();
     };
     addAndMakeVisible (pluginNameButton);
+
+    midiBadge.onPrepareDragFile = [this] { return onPrepareMidiDragFile != nullptr ? onPrepareMidiDragFile() : juce::File(); };
+    addAndMakeVisible (midiBadge);
 }
 
 void TransportBar::setPlaying (bool playing)
@@ -179,4 +244,6 @@ void TransportBar::resized()
     pluginNameButton.setBounds (right.removeFromRight (160).withSizeKeepingCentre (160, 32));
     right.removeFromRight (8);
     loadButton.setBounds (right.removeFromRight (100).withSizeKeepingCentre (100, 32));
+    right.removeFromRight (8);
+    midiBadge.setBounds (right.removeFromRight (76).withSizeKeepingCentre (76, 32));
 }

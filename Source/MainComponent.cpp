@@ -1,5 +1,6 @@
 #include "MainComponent.h"
 #include "Localization.h"
+#include "MidiExporter.h"
 #include <fstream>
 
 static void debugLog (const juce::String& msg)
@@ -108,6 +109,19 @@ MainComponent::MainComponent()
     };
     transportBar.onLoadPlugin = [this] { loadPlugin(); };
     transportBar.onOpenPluginEditor = [this] { openPluginEditor(); };
+    transportBar.onPrepareMidiDragFile = [this]() -> juce::File
+    {
+        reharm::PlaybackSettings settings { display.voicingStyle, display.arpPattern, display.arpRate };
+        auto data = reharm::PlaybackBuilder::build (model, settings);
+        if (data == nullptr || data->totalChords == 0)
+            return {};
+
+        auto dest = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                        .getChildFile ("Reharm Progression.mid");
+        if (! reharm::MidiExporter::writeMidiFile (*data, sessionData.bpm, dest))
+            return {};
+        return dest;
+    };
 
     model.onChanged = [this] { handleModelChanged(); };
 
