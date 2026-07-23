@@ -92,6 +92,53 @@ void ProgressionModel::setKey (KeyContext newKey)
     notifyChanged();
 }
 
+ProgressionState ProgressionModel::captureState() const
+{
+    ProgressionState state;
+    state.bars = bars;
+    state.numBars = numBars;
+    state.key = key;
+    return state;
+}
+
+void ProgressionModel::restoreState (const ProgressionState& state)
+{
+    bars = state.bars;
+    numBars = std::clamp (state.numBars, 1, maxBars);
+    key = state.key;
+    notifyChanged();
+}
+
+bool operator== (const Bar& a, const Bar& b) noexcept
+{
+    return a.subdivision == b.subdivision && a.slots == b.slots;
+}
+
+bool operator!= (const Bar& a, const Bar& b) noexcept
+{
+    return ! (a == b);
+}
+
+bool operator== (const KeyContext& a, const KeyContext& b) noexcept
+{
+    return a.tonicPitchClass == b.tonicPitchClass && a.isMajor == b.isMajor;
+}
+
+bool operator!= (const KeyContext& a, const KeyContext& b) noexcept
+{
+    return ! (a == b);
+}
+
+bool operator== (const ProgressionState& a, const ProgressionState& b) noexcept
+{
+    return a.bars == b.bars && a.numBars == b.numBars && a.key == b.key;
+}
+
+bool operator!= (const ProgressionState& a, const ProgressionState& b) noexcept
+{
+    return ! (a == b);
+}
+
 std::vector<FlatChord> ProgressionModel::flatten() const
 {
     std::vector<FlatChord> result;

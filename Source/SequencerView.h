@@ -28,6 +28,8 @@ public:
 
     void paint (juce::Graphics& g) override;
     void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
     void resized() override;
 
 private:
@@ -36,6 +38,13 @@ private:
     std::vector<reharm::ChordAnalysis> analyses;
     int playingFlatIndex = -1;
     bool layoutDirty = true;
+
+    // Drag-to-move state
+    bool draggingCell = false;
+    int dragSourceBar = -1, dragSourceSlot = -1;
+    std::optional<reharm::Chord> dragChord;
+    juce::Point<int> dragPos;
+    int dropTargetBar = -1, dropTargetSlot = -1;
 
     static constexpr int kMaxBars = reharm::ProgressionModel::maxBars;
     static constexpr int kCols = 4;
@@ -53,6 +62,9 @@ private:
                     juce::Rectangle<int> bounds, bool ghost);
     int flatIndexFor (int bar, int slot) const;
     void hitTest (juce::Point<int> pos);
+
+    /** Hit active bar/slot without mutating the model (unlike hitTest). */
+    std::optional<std::pair<int, int>> cellAt (juce::Point<int> pos);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SequencerView)
 };

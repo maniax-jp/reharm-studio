@@ -110,6 +110,7 @@ target_sources(ReharmStudioTests PRIVATE
     Tests/ProgressionModelTest.cpp
     Tests/HarmonyAnalyzerTest.cpp
     Tests/StateStoreTest.cpp
+    Tests/UndoHistoryTest.cpp
     Source/AudioEngine.cpp
     Source/ChordModel.cpp
     Source/ProgressionModel.cpp

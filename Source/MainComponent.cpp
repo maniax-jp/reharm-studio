@@ -116,6 +116,7 @@ MainComponent::MainComponent()
             reharm::ProgressionPresets::applyToModel (presets.front(), model);
     }
     headerBar.setUserPresets (stateStore.listUserPresetNames());
+    undoHistory.reset (model.captureState());
 
     refreshAnalysis();
     updateEditorVisibility();
@@ -162,6 +163,48 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         togglePlayback();
         return true;
     }
+
+    const auto mods = key.getModifiers();
+    const int code = key.getKeyCode();
+    const auto lower = (juce::juce_wchar) juce::CharacterFunctions::toLowerCase ((juce::juce_wchar) code);
+
+    if (mods.isCommandDown() && lower == 'z')
+    {
+        if (mods.isShiftDown()) performRedo(); else performUndo();
+        return true;
+    }
+    if (mods.isCommandDown() && lower == 'c')
+    {
+        if (display.hasSelection())
+            if (auto c = model.getChord (display.selectedBar, display.selectedSlot))
+            {
+                display.chordClipboard = c;
+                return true;
+            }
+        return false;
+    }
+    if (mods.isCommandDown() && lower == 'v')
+    {
+        if (display.hasSelection() && display.chordClipboard.has_value())
+        {
+            model.setChord (display.selectedBar, display.selectedSlot, display.chordClipboard);
+            return true;
+        }
+        return false;
+    }
+    if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey)
+    {
+        if (display.hasSelection())
+        {
+            model.setChord (display.selectedBar, display.selectedSlot, std::nullopt);
+            display.clearSelection();
+            updateEditorVisibility();
+            sequencerView.repaint();
+            return true;
+        }
+        return false;
+    }
+
     return false;
 }
 
@@ -242,6 +285,9 @@ void MainComponent::updateEditorVisibility()
 
 void MainComponent::handleModelChanged()
 {
+    if (! restoringHistory)
+        undoHistory.commit (model.captureState());
+
     sequencerView.markLayoutDirty();
     sequencerView.repaint();
     refreshAnalysis();
@@ -251,6 +297,40 @@ void MainComponent::handleModelChanged()
         pushChordDataToEngine();
 
     markSessionDirty();
+}
+
+void MainComponent::applyHistoryState (const reharm::ProgressionState& s)
+{
+    restoringHistory = true;
+    model.restoreState (s);
+    restoringHistory = false;
+    headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
+    validateSelection();
+}
+
+void MainComponent::performUndo()
+{
+    if (auto s = undoHistory.undo())
+        applyHistoryState (*s);
+}
+
+void MainComponent::performRedo()
+{
+    if (auto s = undoHistory.redo())
+        applyHistoryState (*s);
+}
+
+void MainComponent::validateSelection()
+{
+    if (! display.hasSelection())
+        return;
+    if (display.selectedBar >= model.getNumBars()
+        || display.selectedSlot >= model.getBar (display.selectedBar).numSlots())
+    {
+        display.clearSelection();
+        updateEditorVisibility();
+        sequencerView.repaint();
+    }
 }
 
 void MainComponent::refreshAnalysis()
