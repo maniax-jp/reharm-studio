@@ -21,6 +21,9 @@
   C7(b9,13) や C(omit5) の形式）し、ディグリーネームを常に併記
 - **クローズ / オープンボイシング** の切替
 - 再生中のセルをリアルタイムハイライト
+- セルの **コピー / ペースト / 削除**(Cmd+C / Cmd+V / Delete)と
+  **Undo / Redo**(Cmd+Z / Shift+Cmd+Z)
+- セルを **ドラッグで移動**、Option+ドラッグで複製
 
 ### 代表進行プリセット
 
@@ -36,6 +39,23 @@ Fly Me to the Moon を現在のキーに移調して一括適用。
   パッシングディミニッシュ / ピカルディ終止 / リレイテッドツーマイナー
 - コードの置き換え候補（代理コード・裏コード・ドミナント化）をワンクリックで適用
 
+### アルペジオ再生
+
+- ブロック再生に加え、アルペジオ(上行 / 下行 / 上下)で再生可能
+- レートは 1/4・1/8・1/16 から選択
+
+### 自動保存とユーザープリセット
+
+- 進行・キー・BPM・音量・ボイシング・アルペジオ設定・プラグイン(音色状態含む)を
+  自動保存し、次回起動時に自動復元。ファイル操作は不要
+- ヘッダーの「保存」ボタンで現在の進行に名前を付けて保存。
+  プリセット選択欄の User セクションからいつでも呼び出せる
+
+### MIDI 書き出し(ドラッグ&ドロップ)
+
+- トランスポートの MIDI バッジを DAW へドラッグ&ドロップすると、
+  現在の進行(ボイシング / アルペジオ設定を反映)を SMF として持ち出せる
+
 ### VST3 ホスト
 
 - VST3 インストゥルメントプラグインの音色でコード進行を再生
@@ -47,7 +67,11 @@ Fly Me to the Moon を現在のキーに移調して一括適用。
 3. プラグイン名ボタンをクリックすると、プラグインの GUI エディタが開く
 4. ヘッダーでキー / スケール / プリセット進行を選択する
 5. セルをクリックしてコードを編集する（**OPT** ボタンで omit / テンションを追加）
-6. 丸い再生ボタンで再生 / 停止
+6. 丸い再生ボタンで再生 / 停止（再生スタイルでアルペジオを選択可能）
+7. **保存** ボタンで進行に名前を付けて保存し、プリセット欄の User から呼び出す
+8. **MIDI** バッジを DAW へドラッグ&ドロップして進行を書き出す
+
+作業状態は自動保存され、次回起動時にプラグインの音色ごと復元されます。
 
 ## トラブルシューティング
 
@@ -80,6 +104,10 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 │   ├── ChordModel.*                 # コード理論コア（23種のコードクオリティ・omit/addオプション・命名・ディグリー・ボイシング）
 │   ├── ProgressionModel.*           # 8小節×1/2/4分割のシーケンサーモデル・代表進行プリセット
 │   ├── HarmonyAnalyzer.*            # パターン検出・ノンダイアトニック分類・置換候補
+│   ├── PlaybackSettings.h / PlaybackBuilder.*  # 再生データ構築（アルペジオのマイクロスロット展開）
+│   ├── StateStore.*                 # 状態のJSON保存/復元（セッション自動保存・ユーザープリセット）
+│   ├── UndoHistory.h                # スナップショット方式の Undo/Redo
+│   ├── MidiExporter.*               # SMF 書き出し（MIDI ドラッグ&ドロップ）
 │   ├── Theme.*                      # Studio Noir デザインシステム（LookAndFeel・パレット）
 │   ├── HeaderBar.* / SequencerView.* / AnalysisStrip.* / ChordEditorPanel.* / TransportBar.*  # UIコンポーネント
 │   └── Localization.h               # UI日本語表示（UTF-8安全な変換層）
@@ -89,6 +117,10 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 │   ├── ChordModelTest.cpp           # コード理論コア・ボイシングのテスト
 │   ├── ProgressionModelTest.cpp     # シーケンサーモデル・プリセットのテスト
 │   ├── HarmonyAnalyzerTest.cpp      # ハーモニー解析のテスト
+│   ├── StateStoreTest.cpp           # 状態保存/復元のテスト
+│   ├── UndoHistoryTest.cpp          # Undo/Redo のテスト
+│   ├── PlaybackBuilderTest.cpp      # 再生データ構築・アルペジオ展開のテスト
+│   ├── MidiExporterTest.cpp         # SMF 書き出しのテスト
 │   └── TimingTest.cpp               # タイミング計算テスト
 ├── Experiments/                     # 実験的なプログラム（仕様確認・動作検証用）
 │   ├── PluginLoadTest.cpp           # VST3 プラグインのチャンネル構成検証（VPS Avenger 用）
