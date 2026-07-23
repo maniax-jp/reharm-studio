@@ -468,6 +468,26 @@ juce::String ChordModel::qualityDisplayName (ChordQuality q)
     return qualitySuffix (q);
 }
 
+juce::String ChordModel::qualityId (ChordQuality q)
+{
+    if (q == ChordQuality::Major)
+        return "maj";
+
+    return qualitySuffix (q);
+}
+
+std::optional<ChordQuality> ChordModel::qualityFromId (const juce::String& id)
+{
+    for (int i = 0; i < static_cast<int> (ChordQuality::NumQualities); ++i)
+    {
+        const auto q = static_cast<ChordQuality> (i);
+        if (qualityId (q) == id)
+            return q;
+    }
+
+    return std::nullopt;
+}
+
 juce::String ChordModel::pitchClassName (int pitchClass, bool preferFlat)
 {
     static const char* const sharpNames[12] = {

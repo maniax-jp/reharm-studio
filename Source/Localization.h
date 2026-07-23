@@ -81,6 +81,13 @@ inline juce::String tr (const juce::String& key)
         // Misc UI
         { "No pattern detected", "\xE3\x83\x91\xE3\x82\xBF\xE3\x83\xBC\xE3\x83\xB3\xE6\x9C\xAA\xE6\xA4\x9C\xE5\x87\xBA" },                                  // パターン未検出
         { "No Plugin",           "\xE3\x83\x97\xE3\x83\xA9\xE3\x82\xB0\xE3\x82\xA4\xE3\x83\xB3\xE6\x9C\xAA\xE3\x83\xAD\xE3\x83\xBC\xE3\x83\x89" },          // プラグイン未ロード
+        { "User",                "\xE3\x83\xA6\xE3\x83\xBC\xE3\x82\xB6\xE3\x83\xBC" },                                                                      // ユーザー
+        { "Save",                "\xE4\xBF\x9D\xE5\xAD\x98" },                                                                                              // 保存
+        { "Save Progression",    "\xE9\x80\xB2\xE8\xA1\x8C\xE3\x82\x92\xE4\xBF\x9D\xE5\xAD\x98" },                                                          // 進行を保存
+        { "Progression name",    "\xE9\x80\xB2\xE8\xA1\x8C\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D" },                                                          // 進行の名前
+        { "My Progression",      "\xE3\x83\x9E\xE3\x82\xA4\xE9\x80\xB2\xE8\xA1\x8C" },                                                                      // マイ進行
+        { "Overwrite preset?",   "\xE5\x90\x8C\xE5\x90\x8D\xE3\x81\xAE\xE9\x80\xB2\xE8\xA1\x8C\xE3\x82\x92\xE4\xB8\x8A\xE6\x9B\xB8\xE3\x81\x8D\xE3\x81\xBE\xE3\x81\x99\xE3\x81\x8B?" }, // 同名の進行を上書きしますか?
+        { "Cancel",              "\xE3\x82\xAD\xE3\x83\xA3\xE3\x83\xB3\xE3\x82\xBB\xE3\x83\xAB" },                                                          // キャンセル
     };
 
     for (const auto& e : table)

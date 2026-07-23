@@ -11,6 +11,7 @@
 #include "AnalysisStrip.h"
 #include "ChordEditorPanel.h"
 #include "TransportBar.h"
+#include "StateStore.h"
 
 class PluginEditorWindow : public juce::DocumentWindow
 {
@@ -54,6 +55,11 @@ public:
 
 private:
     void loadPlugin();
+    /** silentOnError=true suppresses failure dialogs, logging via debugLog only
+        (used for startup restore). */
+    void loadPluginFromFile (const juce::File& file,
+                             std::unique_ptr<juce::MemoryBlock> stateToApply,
+                             bool silentOnError);
     void openPluginEditor();
     void startPlayback();
     void stopPlayback();
@@ -63,12 +69,30 @@ private:
     void refreshAnalysis();
     void updateEditorVisibility();
 
+    void markSessionDirty();
+    void saveSessionNow();
+    void refreshPluginStateCache();
+    void promptSaveUserPreset();
+    void doSaveUserPreset (const juce::String& name);
+    void loadUserPreset (const juce::String& name);
+
     std::unique_ptr<ReharmLookAndFeel> lookAndFeel;
     std::unique_ptr<AudioEngine> audioEngine;
 
     reharm::ProgressionModel model;
     DisplayState display;
     bool isPlaying = false;
+
+    reharm::StateStore stateStore { reharm::StateStore::createDefault() };
+    reharm::StateStore::SessionData sessionData;
+    juce::String lastUserPresetName;
+
+    struct DebounceTimer : juce::Timer
+    {
+        std::function<void()> onFire;
+        void timerCallback() override { stopTimer(); if (onFire) onFire(); }
+    };
+    DebounceTimer autosaveTimer;
 
     HeaderBar headerBar;
     SequencerView sequencerView;

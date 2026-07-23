@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <optional>
 #include <vector>
 
 namespace reharm
@@ -127,6 +128,13 @@ public:
 
     /** Human-readable name for UI quality selectors (same as suffix but "maj" for Major). */
     static juce::String qualityDisplayName (ChordQuality q);
+
+    /** Stable string ID for the save format. Same as qualitySuffix but Major is "maj"
+        (an empty suffix would be ambiguous as a JSON key). */
+    static juce::String qualityId (ChordQuality q);
+
+    /** Reverse lookup for qualityId. Returns nullopt when unrecognised. */
+    static std::optional<ChordQuality> qualityFromId (const juce::String& id);
 
     /** Pitch-class name, e.g. 1 -> "C#" (or "Db" when preferFlat). */
     static juce::String pitchClassName (int pitchClass, bool preferFlat = false);

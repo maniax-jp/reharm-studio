@@ -19,13 +19,17 @@ HeaderBar::HeaderBar()
     scaleBox.onChange = [this] { handleKeyOrScaleChanged(); };
     addAndMakeVisible (scaleBox);
 
-    const auto& presets = reharm::ProgressionPresets::all();
-    for (int i = 0; i < (int) presets.size(); ++i)
-        presetBox.addItem (reharm::loc::tr (presets[(size_t) i].name), i + 1);
-    presetBox.setTextWhenNothingSelected ("Select preset...");
-    presetBox.setSelectedId (0, juce::dontSendNotification);
     presetBox.onChange = [this] { handlePresetChanged(); };
     addAndMakeVisible (presetBox);
+    setUserPresets ({});
+
+    saveButton.setButtonText (reharm::loc::tr ("Save"));
+    saveButton.onClick = [this]
+    {
+        if (onSaveRequested)
+            onSaveRequested();
+    };
+    addAndMakeVisible (saveButton);
 
     voicingToggle.setLeftActive (true); // default: Close
 
@@ -49,6 +53,30 @@ void HeaderBar::setVoicingClose (bool close)
     voicingToggle.setLeftActive (close);
 }
 
+void HeaderBar::setUserPresets (const juce::StringArray& names)
+{
+    userPresetNames = names;
+
+    presetBox.clear (juce::dontSendNotification);
+
+    const auto& presets = reharm::ProgressionPresets::all();
+    for (int i = 0; i < (int) presets.size(); ++i)
+        presetBox.addItem (reharm::loc::tr (presets[(size_t) i].name), i + 1);
+
+    if (! userPresetNames.isEmpty())
+    {
+        presetBox.addSeparator();
+        presetBox.addSectionHeading (reharm::loc::tr ("User"));
+
+        for (int i = 0; i < userPresetNames.size(); ++i)
+            presetBox.addItem (userPresetNames[i], 1000 + i);
+    }
+
+    presetBox.setTextWhenNothingSelected ("Select preset...");
+    // Command-style combo box: always rests in the deselected state.
+    presetBox.setSelectedId (0, juce::dontSendNotification);
+}
+
 void HeaderBar::handleKeyOrScaleChanged()
 {
     if (onKeyChanged)
@@ -61,12 +89,24 @@ void HeaderBar::handlePresetChanged()
     if (id <= 0)
         return;
 
-    const auto& presets = reharm::ProgressionPresets::all();
-    const int index = id - 1;
-    if (index >= 0 && index < (int) presets.size())
+    if (id >= 1000)
     {
-        if (onPresetSelected)
-            onPresetSelected (presets[(size_t) index]);
+        const int index = id - 1000;
+        if (index >= 0 && index < userPresetNames.size())
+        {
+            if (onUserPresetSelected)
+                onUserPresetSelected (userPresetNames[index]);
+        }
+    }
+    else
+    {
+        const auto& presets = reharm::ProgressionPresets::all();
+        const int index = id - 1;
+        if (index >= 0 && index < (int) presets.size())
+        {
+            if (onPresetSelected)
+                onPresetSelected (presets[(size_t) index]);
+        }
     }
 
     // Command-style: clear selection immediately
@@ -113,6 +153,10 @@ void HeaderBar::resized()
     placeCombo (keyBox, comboW);
     placeCombo (scaleBox, 90);
     placeCombo (presetBox, 200);
+
+    const int saveButtonW = 64;
+    saveButton.setBounds (area.removeFromLeft (saveButtonW).withSizeKeepingCentre (saveButtonW, comboH));
+    area.removeFromLeft (gap);
 
     area.removeFromLeft (12);
 
