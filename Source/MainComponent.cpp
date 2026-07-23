@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "Localization.h"
 #include <fstream>
 
 static void debugLog (const juce::String& msg)
@@ -57,9 +58,14 @@ MainComponent::MainComponent()
     {
         display.voicingStyle = close ? reharm::Voicing::Style::Close
                                      : reharm::Voicing::Style::Open;
+        sessionData.voicingClose = close;
         if (isPlaying)
             pushChordDataToEngine();
+        markSessionDirty();
     };
+
+    headerBar.onSaveRequested = [this] { promptSaveUserPreset(); };
+    headerBar.onUserPresetSelected = [this] (const juce::String& name) { loadUserPreset (name); };
 
     sequencerView.onCellSelected = [this] (int bar, int slot)
     {
@@ -73,23 +79,43 @@ MainComponent::MainComponent()
     transportBar.onPlayStopClicked = [this] { togglePlayback(); };
     transportBar.onBpmChanged = [this] (int bpm)
     {
+        sessionData.bpm = bpm;
         audioEngine->setBpm (bpm);
+        markSessionDirty();
     };
     transportBar.onVolumeChanged = [this] (float vol)
     {
+        sessionData.volume = vol;
         audioEngine->setVolume (vol);
+        markSessionDirty();
     };
     transportBar.onLoadPlugin = [this] { loadPlugin(); };
     transportBar.onOpenPluginEditor = [this] { openPluginEditor(); };
 
     model.onChanged = [this] { handleModelChanged(); };
 
-    // Seed a simple default progression so the UI is not empty on launch
+    autosaveTimer.onFire = [this] { saveSessionNow(); };
+
+    const bool restored = stateStore.loadSession (model, sessionData);
+    if (restored)
     {
+        headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
+        display.voicingStyle = sessionData.voicingClose ? reharm::Voicing::Style::Close
+                                                        : reharm::Voicing::Style::Open;
+        headerBar.setVoicingClose (sessionData.voicingClose);
+        transportBar.setBpm (sessionData.bpm);
+        transportBar.setVolume (sessionData.volume);
+        audioEngine->setBpm (sessionData.bpm);
+        audioEngine->setVolume (sessionData.volume);
+    }
+    else
+    {
+        // Seed a simple default progression so the UI is not empty on launch
         const auto& presets = reharm::ProgressionPresets::all();
         if (! presets.empty())
             reharm::ProgressionPresets::applyToModel (presets.front(), model);
     }
+    headerBar.setUserPresets (stateStore.listUserPresetNames());
 
     refreshAnalysis();
     updateEditorVisibility();
@@ -108,6 +134,25 @@ MainComponent::MainComponent()
 
     setAudioChannels (0, 2);
     startTimer (50);
+
+    if (restored && sessionData.pluginPath.isNotEmpty())
+    {
+        juce::Component::SafePointer<MainComponent> safe (this);
+        juce::MessageManager::callAsync ([safe]
+        {
+            if (safe == nullptr) return;
+            juce::File f (safe->sessionData.pluginPath);
+            if (! f.exists()) return;
+            std::unique_ptr<juce::MemoryBlock> state;
+            if (safe->sessionData.pluginStateB64.isNotEmpty())
+            {
+                state = std::make_unique<juce::MemoryBlock>();
+                juce::MemoryOutputStream mo (*state, false);
+                juce::Base64::convertFromBase64 (mo, safe->sessionData.pluginStateB64);
+            }
+            safe->loadPluginFromFile (f, std::move (state), true);
+        });
+    }
 }
 
 bool MainComponent::keyPressed (const juce::KeyPress& key)
@@ -136,6 +181,9 @@ void MainComponent::visibilityChanged()
 MainComponent::~MainComponent()
 {
     stopTimer();
+    autosaveTimer.stopTimer();
+    refreshPluginStateCache();
+    saveSessionNow();
     stopPlayback();
     editorWindow.reset();
     shutdownAudio();
@@ -201,6 +249,8 @@ void MainComponent::handleModelChanged()
 
     if (isPlaying)
         pushChordDataToEngine();
+
+    markSessionDirty();
 }
 
 void MainComponent::refreshAnalysis()
@@ -210,6 +260,103 @@ void MainComponent::refreshAnalysis()
 
     const auto patterns = reharm::HarmonyAnalyzer::detectPatterns (model);
     analysisStrip.setPatterns (patterns, model);
+}
+
+void MainComponent::markSessionDirty()
+{
+    autosaveTimer.startTimer (1000);
+}
+
+void MainComponent::saveSessionNow()
+{
+    stateStore.saveSession (model, sessionData);
+}
+
+void MainComponent::refreshPluginStateCache()
+{
+    auto* plugin = audioEngine->getPluginInstance();
+    if (plugin == nullptr)
+        return;
+
+    juce::MemoryBlock mb;
+    plugin->getStateInformation (mb);
+    sessionData.pluginStateB64 = mb.getSize() > 0
+        ? juce::Base64::toBase64 (mb.getData(), mb.getSize())
+        : juce::String();
+}
+
+void MainComponent::promptSaveUserPreset()
+{
+    juce::String defaultName = lastUserPresetName;
+    if (defaultName.isEmpty())
+    {
+        const auto existing = stateStore.listUserPresetNames();
+        int n = 1;
+        auto candidate = [&n] { return reharm::loc::tr ("My Progression") + " " + juce::String (n); };
+        while (existing.contains (candidate())) ++n;
+        defaultName = candidate();
+    }
+
+    auto* aw = new juce::AlertWindow (reharm::loc::tr ("Save Progression"),
+                                      reharm::loc::tr ("Progression name"),
+                                      juce::MessageBoxIconType::NoIcon);
+    aw->addTextEditor ("name", defaultName);
+    aw->addButton (reharm::loc::tr ("Save"), 1, juce::KeyPress (juce::KeyPress::returnKey));
+    aw->addButton (reharm::loc::tr ("Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    aw->enterModalState (true, juce::ModalCallbackFunction::create ([this, aw] (int result)
+    {
+        const auto name = reharm::StateStore::sanitizePresetName (aw->getTextEditorContents ("name"));
+        if (result == 1 && name.isNotEmpty())
+        {
+            if (stateStore.userPresetExists (name))
+            {
+                juce::NativeMessageBox::showOkCancelBox (
+                    juce::MessageBoxIconType::QuestionIcon,
+                    reharm::loc::tr ("Save Progression"),
+                    reharm::loc::tr ("Overwrite preset?"),
+                    this,
+                    juce::ModalCallbackFunction::create ([this, name] (int ok)
+                    {
+                        if (ok == 1)
+                            doSaveUserPreset (name);
+                    }));
+            }
+            else
+            {
+                doSaveUserPreset (name);
+            }
+        }
+    }), true);   // deleteWhenDismissed = true
+}
+
+void MainComponent::doSaveUserPreset (const juce::String& name)
+{
+    if (stateStore.saveUserPreset (name, model, sessionData))
+    {
+        lastUserPresetName = name;
+        headerBar.setUserPresets (stateStore.listUserPresetNames());
+    }
+}
+
+void MainComponent::loadUserPreset (const juce::String& name)
+{
+    reharm::StateStore::SessionData loaded = sessionData;   // volume/plugin stay as-is
+    if (stateStore.loadUserPreset (name, model, loaded))
+    {
+        // Only the musical fields are applied (plugin/volume are not in the preset).
+        sessionData.bpm = loaded.bpm;
+        sessionData.voicingClose = loaded.voicingClose;
+        display.voicingStyle = loaded.voicingClose ? reharm::Voicing::Style::Close
+                                                   : reharm::Voicing::Style::Open;
+        headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
+        headerBar.setVoicingClose (loaded.voicingClose);
+        transportBar.setBpm (loaded.bpm);
+        audioEngine->setBpm (loaded.bpm);
+        lastUserPresetName = name;
+        display.clearSelection();
+        updateEditorVisibility();
+        markSessionDirty();
+    }
 }
 
 void MainComponent::pushChordDataToEngine()
@@ -322,101 +469,117 @@ void MainComponent::loadPlugin()
                               auto file = c.getResult();
 
                               if (file.exists())
-                              {
-                                  debugLog ("loadPlugin: file selected: " + file.getFullPathName());
-
-                                  stopPlayback();
-                                  editorWindow.reset();
-
-                                  juce::VST3PluginFormat format;
-                                  juce::OwnedArray<juce::PluginDescription> descriptions;
-
-                                  debugLog ("loadPlugin: scanning plugin file...");
-                                  format.findAllTypesForFile (descriptions, file.getFullPathName());
-                                  debugLog ("loadPlugin: scan complete, descriptions count: " + juce::String (descriptions.size()));
-
-                                  if (! descriptions.isEmpty())
-                                  {
-                                      auto setup = deviceManager.getAudioDeviceSetup();
-                                      double sampleRate = setup.sampleRate;
-                                      int blockSize = setup.bufferSize;
-                                      if (sampleRate <= 0.0)
-                                          sampleRate = 44100.0;
-                                      if (blockSize <= 0)
-                                          blockSize = 512;
-
-                                      debugLog ("loadPlugin: using device setup SR=" + juce::String (sampleRate)
-                                                + ", BS=" + juce::String (blockSize)
-                                                + " (device stays open; load gated via beginPluginLoad)");
-
-                                      // Prefer instrument plugins when multiple descriptions exist.
-                                      const juce::PluginDescription* chosen = nullptr;
-                                      const juce::PluginDescription* fallback = nullptr;
-                                      for (auto* d : descriptions)
-                                          {
-                                              if (d == nullptr)
-                                                  continue;
-
-                                              if (fallback == nullptr)
-                                                  fallback = d;
-
-                                              if (d->isInstrument)
-                                              {
-                                                  chosen = d;
-                                                  break;
-                                              }
-                                          }
-                                      if (chosen == nullptr)
-                                          chosen = fallback;
-
-                                      if (chosen == nullptr)
-                                          {
-                                              debugLog ("No valid plugin description found");
-                                              juce::NativeMessageBox::showMessageBoxAsync (
-                                                  juce::MessageBoxIconType::WarningIcon,
-                                                  "Plugin Load Failed",
-                                                  "No valid plugin description was found in the selected file.");
-                                              return;
-                                          }
-
-                                      audioEngine->beginPluginLoad();
-
-                                      debugLog ("loadPlugin: calling createInstanceFromDescription...");
-                                      juce::String error;
-                                      auto descCopy = *chosen;
-                                      debugLog ("loadPlugin: desc name=" + descCopy.name);
-                                      auto pluginInstance = format.createInstanceFromDescription (descCopy, sampleRate, blockSize, error);
-
-                                      audioEngine->endPluginLoad();
-
-                                      if (pluginInstance != nullptr)
-                                      {
-                                          debugLog ("loadPlugin: createInstanceFromDescription succeeded");
-
-                                          auto pluginName = pluginInstance->getName();
-                                          audioEngine->loadPluginInstance (std::move (pluginInstance), sampleRate, blockSize);
-                                          debugLog ("Plugin loaded successfully");
-
-                                          transportBar.setPluginName (pluginName);
-                                          debugLog ("Plugin loaded UI update: " + pluginName);
-                                      }
-                                      else
-                                      {
-                                          debugLog ("loadPlugin: createInstanceFromDescription returned nullptr: " + error);
-                                          juce::NativeMessageBox::showMessageBoxAsync (
-                                              juce::MessageBoxIconType::WarningIcon,
-                                              "Plugin Load Failed",
-                                              "Failed to create plugin instance:\n" + error);
-                                      }
-                                  }
-                                  else
-                                  {
-                                      debugLog ("No valid VST3 plugin found");
-                                      juce::NativeMessageBox::showMessageBoxAsync (
-                                          juce::MessageBoxIconType::WarningIcon,
-                                          "Plugin Load Failed",
-                                          "No valid VST3 plugin was found in the selected file.");
-                                  }
-                              }
+                                  loadPluginFromFile (file, nullptr, false);
                           });
+}
+
+void MainComponent::loadPluginFromFile (const juce::File& file,
+                                        std::unique_ptr<juce::MemoryBlock> stateToApply,
+                                        bool silentOnError)
+{
+    debugLog ("loadPluginFromFile: file selected: " + file.getFullPathName());
+
+    stopPlayback();
+    editorWindow.reset();
+
+    juce::VST3PluginFormat format;
+    juce::OwnedArray<juce::PluginDescription> descriptions;
+
+    debugLog ("loadPluginFromFile: scanning plugin file...");
+    format.findAllTypesForFile (descriptions, file.getFullPathName());
+    debugLog ("loadPluginFromFile: scan complete, descriptions count: " + juce::String (descriptions.size()));
+
+    if (! descriptions.isEmpty())
+    {
+        auto setup = deviceManager.getAudioDeviceSetup();
+        double sampleRate = setup.sampleRate;
+        int blockSize = setup.bufferSize;
+        if (sampleRate <= 0.0)
+            sampleRate = 44100.0;
+        if (blockSize <= 0)
+            blockSize = 512;
+
+        debugLog ("loadPluginFromFile: using device setup SR=" + juce::String (sampleRate)
+                  + ", BS=" + juce::String (blockSize)
+                  + " (device stays open; load gated via beginPluginLoad)");
+
+        // Prefer instrument plugins when multiple descriptions exist.
+        const juce::PluginDescription* chosen = nullptr;
+        const juce::PluginDescription* fallback = nullptr;
+        for (auto* d : descriptions)
+            {
+                if (d == nullptr)
+                    continue;
+
+                if (fallback == nullptr)
+                    fallback = d;
+
+                if (d->isInstrument)
+                {
+                    chosen = d;
+                    break;
+                }
+            }
+        if (chosen == nullptr)
+            chosen = fallback;
+
+        if (chosen == nullptr)
+            {
+                debugLog ("No valid plugin description found");
+                if (! silentOnError)
+                    juce::NativeMessageBox::showMessageBoxAsync (
+                        juce::MessageBoxIconType::WarningIcon,
+                        "Plugin Load Failed",
+                        "No valid plugin description was found in the selected file.");
+                return;
+            }
+
+        audioEngine->beginPluginLoad();
+
+        debugLog ("loadPluginFromFile: calling createInstanceFromDescription...");
+        juce::String error;
+        auto descCopy = *chosen;
+        debugLog ("loadPluginFromFile: desc name=" + descCopy.name);
+        auto pluginInstance = format.createInstanceFromDescription (descCopy, sampleRate, blockSize, error);
+
+        audioEngine->endPluginLoad();
+
+        if (pluginInstance != nullptr)
+        {
+            debugLog ("loadPluginFromFile: createInstanceFromDescription succeeded");
+
+            if (stateToApply != nullptr && stateToApply->getSize() > 0)
+                pluginInstance->setStateInformation (stateToApply->getData(), (int) stateToApply->getSize());
+
+            auto pluginName = pluginInstance->getName();
+            audioEngine->loadPluginInstance (std::move (pluginInstance), sampleRate, blockSize);
+            debugLog ("Plugin loaded successfully");
+
+            transportBar.setPluginName (pluginName);
+            debugLog ("Plugin loaded UI update: " + pluginName);
+
+            sessionData.pluginPath = file.getFullPathName();
+            sessionData.pluginName = pluginName;
+            refreshPluginStateCache();
+            markSessionDirty();
+        }
+        else
+        {
+            debugLog ("loadPluginFromFile: createInstanceFromDescription returned nullptr: " + error);
+            if (! silentOnError)
+                juce::NativeMessageBox::showMessageBoxAsync (
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Plugin Load Failed",
+                    "Failed to create plugin instance:\n" + error);
+        }
+    }
+    else
+    {
+        debugLog ("No valid VST3 plugin found");
+        if (! silentOnError)
+            juce::NativeMessageBox::showMessageBoxAsync (
+                juce::MessageBoxIconType::WarningIcon,
+                "Plugin Load Failed",
+                "No valid VST3 plugin was found in the selected file.");
+    }
 }
