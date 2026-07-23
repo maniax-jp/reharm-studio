@@ -1,5 +1,7 @@
 #include "SequencerView.h"
 #include "Localization.h"
+#include <optional>
+#include <utility>
 
 SequencerView::SequencerView()
 {
@@ -131,6 +133,32 @@ void SequencerView::paint (juce::Graphics& g)
     {
         const bool ghost = i >= numBars;
         paintBar (g, i, barBounds[i], ghost);
+    }
+
+    if (draggingCell && dragChord.has_value())
+    {
+        // Drop target highlight
+        if (dropTargetBar >= 0
+            && ! (dropTargetBar == dragSourceBar && dropTargetSlot == dragSourceSlot))
+        {
+            g.setColour (theme::accent);
+            g.drawRoundedRectangle (cellBounds[dropTargetBar][dropTargetSlot].toFloat().reduced (1.0f),
+                                    8.0f, 2.0f);
+        }
+
+        // Floating chord-name label near the cursor
+        const juce::String name = reharm::ChordModel::chordName (*dragChord);
+        g.setFont (theme::font (14.0f, true));
+        const int w = juce::roundToInt (juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), name)) + 16;
+        const int h = 24;
+        auto label = juce::Rectangle<int> (dragPos.x + 12, dragPos.y - h / 2, w, h)
+                         .constrainedWithin (getLocalBounds());
+        g.setColour (theme::surfaceHi.withAlpha (0.95f));
+        g.fillRoundedRectangle (label.toFloat(), 6.0f);
+        g.setColour (theme::accent);
+        g.drawRoundedRectangle (label.toFloat().reduced (0.5f), 6.0f, 1.0f);
+        g.setColour (theme::text);
+        g.drawText (name, label, juce::Justification::centred, false);
     }
 }
 
@@ -434,7 +462,87 @@ void SequencerView::hitTest (juce::Point<int> pos)
     }
 }
 
+std::optional<std::pair<int, int>> SequencerView::cellAt (juce::Point<int> pos)
+{
+    if (model == nullptr)
+        return std::nullopt;
+
+    if (layoutDirty)
+    {
+        recomputeLayout();
+        layoutDirty = false;
+    }
+
+    const int numBars = model->getNumBars();
+    for (int bar = 0; bar < numBars; ++bar)
+    {
+        const int n = model->getBar (bar).numSlots();
+        for (int slot = 0; slot < n; ++slot)
+        {
+            if (cellBounds[bar][slot].contains (pos))
+                return std::make_pair (bar, slot);
+        }
+    }
+
+    return std::nullopt;
+}
+
 void SequencerView::mouseDown (const juce::MouseEvent& e)
 {
+    draggingCell = false;
+    dropTargetBar = dropTargetSlot = -1;
+    dragChord.reset();
+    if (auto hit = cellAt (e.getPosition()))
+    {
+        dragSourceBar = hit->first;
+        dragSourceSlot = hit->second;
+        dragChord = model != nullptr ? model->getChord (hit->first, hit->second) : std::nullopt;
+    }
+    else
+    {
+        dragSourceBar = dragSourceSlot = -1;
+    }
     hitTest (e.getPosition());
+}
+
+void SequencerView::mouseDrag (const juce::MouseEvent& e)
+{
+    if (! dragChord.has_value())
+        return;
+    if (! draggingCell && e.getDistanceFromDragStart() < 5)
+        return;
+    draggingCell = true;
+    dragPos = e.getPosition();
+    if (auto hit = cellAt (dragPos))
+    {
+        dropTargetBar = hit->first;
+        dropTargetSlot = hit->second;
+    }
+    else
+    {
+        dropTargetBar = dropTargetSlot = -1;
+    }
+    repaint();
+}
+
+void SequencerView::mouseUp (const juce::MouseEvent& e)
+{
+    if (draggingCell && model != nullptr && dragChord.has_value()
+        && dropTargetBar >= 0
+        && ! (dropTargetBar == dragSourceBar && dropTargetSlot == dragSourceSlot))
+    {
+        const bool copy = e.mods.isAltDown();
+        {
+            reharm::ProgressionModel::ScopedBulkEdit bulk (*model);
+            if (! copy)
+                model->setChord (dragSourceBar, dragSourceSlot, std::nullopt);
+            model->setChord (dropTargetBar, dropTargetSlot, dragChord);
+        }
+        if (onCellSelected)
+            onCellSelected (dropTargetBar, dropTargetSlot);
+    }
+    draggingCell = false;
+    dragChord.reset();
+    dragSourceBar = dragSourceSlot = dropTargetBar = dropTargetSlot = -1;
+    repaint();
 }

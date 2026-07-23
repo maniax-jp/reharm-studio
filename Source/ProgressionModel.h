@@ -8,6 +8,8 @@
 namespace reharm
 {
 
+struct ProgressionState;
+
 /** How many chord slots a bar is divided into. */
 enum class BarSubdivision { One = 1, Two = 2, Four = 4 };
 
@@ -59,6 +61,11 @@ public:
     const KeyContext& getKey() const noexcept;
     void setKey (KeyContext newKey);
 
+    /** Value snapshot of the whole progression (all bars + numBars + key). */
+    ProgressionState captureState() const;
+    /** Apply a snapshot and fire onChanged once. */
+    void restoreState (const ProgressionState& state);
+
     /** Flattens all bars into playable entries (including rests). */
     std::vector<FlatChord> flatten() const;
 
@@ -105,6 +112,21 @@ private:
     int bulkEditDepth = 0;
     bool bulkEditDirty = false;
 };
+
+/** Value snapshot of the whole progression (bars + numBars + key). */
+struct ProgressionState
+{
+    std::array<Bar, ProgressionModel::maxBars> bars;
+    int numBars = 4;
+    KeyContext key;
+};
+
+bool operator== (const Bar& a, const Bar& b) noexcept;
+bool operator!= (const Bar& a, const Bar& b) noexcept;
+bool operator== (const ProgressionState& a, const ProgressionState& b) noexcept;
+bool operator!= (const ProgressionState& a, const ProgressionState& b) noexcept;
+bool operator== (const KeyContext& a, const KeyContext& b) noexcept;
+bool operator!= (const KeyContext& a, const KeyContext& b) noexcept;
 
 /** A named preset progression, expressed relative to the tonic of a major key. */
 struct PresetProgression

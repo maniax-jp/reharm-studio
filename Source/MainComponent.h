@@ -12,6 +12,7 @@
 #include "ChordEditorPanel.h"
 #include "TransportBar.h"
 #include "StateStore.h"
+#include "UndoHistory.h"
 
 class PluginEditorWindow : public juce::DocumentWindow
 {
@@ -76,11 +77,18 @@ private:
     void doSaveUserPreset (const juce::String& name);
     void loadUserPreset (const juce::String& name);
 
+    void applyHistoryState (const reharm::ProgressionState& s);
+    void performUndo();
+    void performRedo();
+    void validateSelection();
+
     std::unique_ptr<ReharmLookAndFeel> lookAndFeel;
     std::unique_ptr<AudioEngine> audioEngine;
 
     reharm::ProgressionModel model;
     DisplayState display;
+    reharm::UndoHistory undoHistory;
+    bool restoringHistory = false;
     bool isPlaying = false;
 
     reharm::StateStore stateStore { reharm::StateStore::createDefault() };
