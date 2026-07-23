@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChordModel.h"
+#include "PlaybackSettings.h"
 #include <optional>
 
 /** Shared UI display / selection state owned by MainComponent. */
@@ -10,6 +11,8 @@ struct DisplayState
     int selectedBar = -1;
     int selectedSlot = -1;
     std::optional<reharm::Chord> chordClipboard;   // Cmd+C internal clipboard
+    reharm::ArpPattern arpPattern = reharm::ArpPattern::Off;
+    reharm::ArpRate arpRate = reharm::ArpRate::Eighth;
 
     bool hasSelection() const noexcept { return selectedBar >= 0 && selectedSlot >= 0; }
 

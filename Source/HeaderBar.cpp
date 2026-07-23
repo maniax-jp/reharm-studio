@@ -39,6 +39,34 @@ HeaderBar::HeaderBar()
             onVoicingChanged (leftActive); // Close = left
     };
     addAndMakeVisible (voicingToggle);
+
+    playStyleBox.addItem (reharm::loc::tr ("Block"),       (int) reharm::ArpPattern::Off     + 1);
+    playStyleBox.addItem (reharm::loc::tr ("Arp Up"),      (int) reharm::ArpPattern::Up      + 1);
+    playStyleBox.addItem (reharm::loc::tr ("Arp Down"),    (int) reharm::ArpPattern::Down    + 1);
+    playStyleBox.addItem (reharm::loc::tr ("Arp Up-Down"), (int) reharm::ArpPattern::UpDown  + 1);
+    playStyleBox.setSelectedId ((int) reharm::ArpPattern::Off + 1, juce::dontSendNotification);
+    playStyleBox.onChange = [this]
+    {
+        const int id = playStyleBox.getSelectedId();
+        const auto pattern = static_cast<reharm::ArpPattern> (id - 1);
+        arpRateBox.setEnabled (pattern != reharm::ArpPattern::Off);
+        if (onPlayStyleChanged)
+            onPlayStyleChanged (pattern);
+    };
+    addAndMakeVisible (playStyleBox);
+
+    arpRateBox.addItem ("1/4",  (int) reharm::ArpRate::Quarter   + 1);
+    arpRateBox.addItem ("1/8",  (int) reharm::ArpRate::Eighth    + 1);
+    arpRateBox.addItem ("1/16", (int) reharm::ArpRate::Sixteenth + 1);
+    arpRateBox.setSelectedId ((int) reharm::ArpRate::Eighth + 1, juce::dontSendNotification);
+    arpRateBox.setEnabled (false); // Block is the initial play style
+    arpRateBox.onChange = [this]
+    {
+        const int id = arpRateBox.getSelectedId();
+        if (onArpRateChanged)
+            onArpRateChanged (static_cast<reharm::ArpRate> (id - 1));
+    };
+    addAndMakeVisible (arpRateBox);
 }
 
 void HeaderBar::setKey (int tonicPitchClass, bool isMajor)
@@ -51,6 +79,17 @@ void HeaderBar::setVoicingClose (bool close)
 
 {
     voicingToggle.setLeftActive (close);
+}
+
+void HeaderBar::setPlayStyle (reharm::ArpPattern pattern)
+{
+    playStyleBox.setSelectedId ((int) pattern + 1, juce::dontSendNotification);
+    arpRateBox.setEnabled (pattern != reharm::ArpPattern::Off);
+}
+
+void HeaderBar::setArpRate (reharm::ArpRate rate)
+{
+    arpRateBox.setSelectedId ((int) rate + 1, juce::dontSendNotification);
 }
 
 void HeaderBar::setUserPresets (const juce::StringArray& names)
@@ -163,4 +202,12 @@ void HeaderBar::resized()
     const int toggleW = 100;
     voicingToggle.setBounds (area.removeFromLeft (toggleW).withSizeKeepingCentre (toggleW, comboH));
 
+    area.removeFromLeft (12);
+
+    const int playStyleW = 130;
+    playStyleBox.setBounds (area.removeFromLeft (playStyleW).withSizeKeepingCentre (playStyleW, comboH));
+    area.removeFromLeft (8);
+
+    const int arpRateW = 64;
+    arpRateBox.setBounds (area.removeFromLeft (arpRateW).withSizeKeepingCentre (arpRateW, comboH));
 }

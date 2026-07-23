@@ -18,6 +18,10 @@ struct ChordData
     int totalChords = 0;
     double totalBeats = 0.0;
 
+    /** Optional map: engine slot index -> UI flat slot index (for playing-cell
+        highlight when slots are subdivided, e.g. arpeggio). Empty = identity. */
+    std::vector<int> displayIndices;
+
     ChordData() = default;
 
     // Existing constructor: assigns 4.0 beats per chord.

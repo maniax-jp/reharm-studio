@@ -56,6 +56,8 @@ public:
             s.pluginPath = "/Library/Audio/Plug-Ins/VST3/Test.vst3";
             s.pluginName = "Test Plugin";
             s.pluginStateB64 = "QUJDRA=="; // "ABCD"
+            s.arpPattern = ArpPattern::UpDown;
+            s.arpRate = ArpRate::Sixteenth;
 
             const auto v = StateStore::serialize (model, s);
 
@@ -88,6 +90,66 @@ public:
             expect (s2.pluginPath == s.pluginPath);
             expect (s2.pluginName == s.pluginName);
             expect (s2.pluginStateB64 == s.pluginStateB64);
+            expect (s2.arpPattern == s.arpPattern);
+            expect (s2.arpRate == s.arpRate);
+        }
+
+        beginTest ("arp field: missing/unknown values fall back to Off / 1/8");
+        {
+            ProgressionModel model;
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
+
+            StateStore::SessionData s;
+            const auto v = StateStore::serialize (model, s); // default arp = Off / Eighth
+
+            ProgressionModel model2;
+            StateStore::SessionData s2;
+            s2.arpPattern = ArpPattern::Up;      // sentinel to verify overwrite
+            s2.arpRate = ArpRate::Sixteenth;
+            expect (StateStore::deserialize (v, model2, s2));
+            expect (s2.arpPattern == ArpPattern::Off);
+            expect (s2.arpRate == ArpRate::Eighth);
+
+            // Missing "arp" object entirely -> same fallback.
+            auto* root = new juce::DynamicObject();
+            root->setProperty ("schema", 1);
+            root->setProperty ("bpm", 120);
+            juce::Array<juce::var> bars;
+            auto* barObj = new juce::DynamicObject();
+            barObj->setProperty ("div", 1);
+            juce::Array<juce::var> slots;
+            slots.add (juce::var());
+            barObj->setProperty ("slots", juce::var (slots));
+            bars.add (juce::var (barObj));
+            root->setProperty ("bars", juce::var (bars));
+
+            StateStore::SessionData s3;
+            s3.arpPattern = ArpPattern::Down;
+            s3.arpRate = ArpRate::Quarter;
+            ProgressionModel model3;
+            expect (StateStore::deserialize (juce::var (root), model3, s3));
+            expect (s3.arpPattern == ArpPattern::Off);
+            expect (s3.arpRate == ArpRate::Eighth);
+
+            // Unknown values -> same fallback.
+            auto* arpObj = new juce::DynamicObject();
+            arpObj->setProperty ("pattern", "sideways");
+            arpObj->setProperty ("rate", "32");
+            auto* root2 = new juce::DynamicObject();
+            root2->setProperty ("schema", 1);
+            root2->setProperty ("bpm", 120);
+            juce::Array<juce::var> bars2;
+            bars2.add (juce::var (barObj));
+            root2->setProperty ("bars", juce::var (bars2));
+            root2->setProperty ("arp", juce::var (arpObj));
+
+            StateStore::SessionData s4;
+            s4.arpPattern = ArpPattern::Down;
+            s4.arpRate = ArpRate::Quarter;
+            ProgressionModel model4;
+            expect (StateStore::deserialize (juce::var (root2), model4, s4));
+            expect (s4.arpPattern == ArpPattern::Off);
+            expect (s4.arpRate == ArpRate::Eighth);
         }
 
         beginTest ("musicalOnly: no plugin/volume fields; deserialize keeps default volume");
