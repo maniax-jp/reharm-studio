@@ -213,11 +213,20 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
             continue;
         }
 
-        // Arpeggio: voicing (Close/Open) does NOT apply. The UI leaves both
-        // voicing options unselected once an arpeggio is chosen, so the arpeggio
-        // is always built from the chord's plain stacked tones (root-position,
-        // Close), independent of whatever voicing was last selected.
-        auto chordNotes = Voicing::midiNotes (*fc.chord, Voicing::Style::Close);
+        // Number of chord tones is decided from the chord itself (independent of
+        // voicing and of any explicit bass): DYAD=2, TRIAD/sus/aug/dim=3, else 4+.
+        const int chordToneCount = static_cast<int> (ChordModel::effectiveIntervals (*fc.chord).size());
+        const bool expandedFromSmall = (chordToneCount <= 3);
+
+        // Voicing (Close/Open) only makes sense for 4+ note chords, whose arpeggio
+        // walks the voiced notes as-is. DYAD/TRIAD are re-stacked into a fixed
+        // role order (root/5th/root'/3rd') by arpeggioBaseNotes, so the Close/Open
+        // setting is irrelevant there and would only corrupt the note roles
+        // (Open adds a low bass + drop-2). Hence: small chords use Close-position
+        // tones; 4+ note chords honour the selected voicing.
+        auto chordNotes = Voicing::midiNotes (*fc.chord,
+                                              expandedFromSmall ? Voicing::Style::Close
+                                                                : settings.voicing);
 
         if (chordNotes.empty())
         {
@@ -227,9 +236,6 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
             displayIndices.push_back (i);
             continue;
         }
-
-        const int origSize = static_cast<int> (chordNotes.size());
-        const bool expandedFromSmall = (origSize <= 3);
 
         // Build arpeggio base notes (expands 2/3-note chords to 4-note base).
         chordNotes = arpeggioBaseNotes (chordNotes, fc.chord->rootPitchClass);
