@@ -160,29 +160,6 @@ void SequencerView::paint (juce::Graphics& g)
         g.drawRoundedRectangle (label.toFloat().reduced (0.5f), 6.0f, 1.0f);
         g.setColour (theme::text);
         g.drawText (name, label, juce::Justification::centred, false);
-
-        // macOS-Finder-style green copy badge (Option/Alt drag)
-        if (dragCopyMode)
-        {
-            const int badgeR = 9;
-            const juce::Point<float> centre (dragPos.x + 18, dragPos.y + 18);
-
-            g.setColour (juce::Colour (0xff28c840));
-            g.fillEllipse (centre.x - badgeR, centre.y - badgeR, badgeR * 2, badgeR * 2);
-
-            g.setColour (juce::Colours::white);
-            g.drawEllipse (centre.x - badgeR, centre.y - badgeR, badgeR * 2, badgeR * 2, 1.5f);
-
-            // White plus sign: arm length ~55% of diameter
-            const int arm = static_cast<int> (std::round (static_cast<float> (badgeR * 2) * 0.55f));
-            const juce::Point<float> p1 (centre.x, centre.y - arm);
-            const juce::Point<float> p2 (centre.x, centre.y + arm);
-            const juce::Point<float> p3 (centre.x - arm, centre.y);
-            const juce::Point<float> p4 (centre.x + arm, centre.y);
-            g.setColour (juce::Colours::white);
-            g.drawLine (juce::Line<float> (p1, p2), 2.0f);
-            g.drawLine (juce::Line<float> (p3, p4), 2.0f);
-        }
     }
 }
 
@@ -575,6 +552,7 @@ void SequencerView::mouseDrag (const juce::MouseEvent& e)
         return;
     draggingCell = true;
     dragCopyMode = e.mods.isAltDown();
+    updateDragCursor();
     dragPos = e.getPosition();
     if (auto hit = dropCellAt (dragPos))
     {
@@ -597,6 +575,7 @@ void SequencerView::modifierKeysChanged (const juce::ModifierKeys& mods)
         {
             dragCopyMode = newCopy;
             repaint();
+            updateDragCursor();
         }
     }
 }
@@ -621,5 +600,14 @@ void SequencerView::mouseUp (const juce::MouseEvent& e)
     draggingCell = false;
     dragChord.reset();
     dragSourceBar = dragSourceSlot = dropTargetBar = dropTargetSlot = -1;
+    setMouseCursor (juce::MouseCursor::NormalCursor);
     repaint();
+}
+
+void SequencerView::updateDragCursor()
+{
+    if (draggingCell && dragChord.has_value() && dragCopyMode)
+        setMouseCursor (juce::MouseCursor::CopyingCursor);
+    else
+        setMouseCursor (juce::MouseCursor::NormalCursor);
 }

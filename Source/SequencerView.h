@@ -71,5 +71,7 @@ private:
     /** Like cellAt but scans all bars including ghost bars (bar >= numBars). */
     std::optional<std::pair<int, int>> dropCellAt (juce::Point<int> pos);
 
+    void updateDragCursor();
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SequencerView)
 };
