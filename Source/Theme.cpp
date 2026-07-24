@@ -105,14 +105,21 @@ void ReharmLookAndFeel::drawButtonText (juce::Graphics& g,
     {
         auto textBounds = comboButton->getLocalBounds();
         if (comboButton->showArrow)
+        {
+            // ComboBox-style: left-aligned label with an 8px gutter, and room on
+            // the right for the dropdown arrow. Without an arrow the label is
+            // centred over the full width, so no side padding must be removed
+            // (removing only the left would shift the centred text rightwards).
             textBounds.removeFromRight (24);
-        textBounds.removeFromLeft (8);
-
-        g.drawFittedText (comboButton->getButtonText(),
-                          textBounds,
-                          comboButton->showArrow ? juce::Justification::centredLeft
-                                                  : juce::Justification::centred,
-                          1);
+            textBounds.removeFromLeft (8);
+            g.drawFittedText (comboButton->getButtonText(), textBounds,
+                              juce::Justification::centredLeft, 1);
+        }
+        else
+        {
+            g.drawFittedText (comboButton->getButtonText(), textBounds,
+                              juce::Justification::centred, 1);
+        }
         return;
     }
 
