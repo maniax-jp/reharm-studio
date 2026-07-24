@@ -142,8 +142,10 @@ public:
             auto upDownData = PlaybackBuilder::build (modelUpDown, upDownSettings);
             expectEquals (upDownData->totalChords, 8);
             // New 8-note period: C G C' G' C'' G' C' G = {60,67,72,79,84,79,72,67}
+            // top = C'' = root + 24 (one octave above C', the root-octave base note).
             const std::vector<int> expectedPeriod8 = { power5Base[0], power5Base[1], power5Base[2], power5Base[3],
-                                                       power5Base[0] + 12, power5Base[3], power5Base[2], power5Base[1] };
+                                                       power5Base[0] + 24, power5Base[3], power5Base[2], power5Base[1] };
+            expect (expectedPeriod8 == std::vector<int> ({ 60, 67, 72, 79, 84, 79, 72, 67 }));
             for (int i = 0; i < 8; ++i)
                 expectEquals (upDownData->notes[(size_t) i][0], expectedPeriod8[(size_t) (i % 8)]);
 
@@ -362,7 +364,8 @@ public:
             // Base: [C, G, C', E'] = [60, 67, 72, 76]
             const std::vector<int> base = { 60, 67, 72, 76 };
             // 8-note UpDown: C G C' E' C'' E' C' G
-            const std::vector<int> cycle = { 60, 67, 72, 76, 72, 76, 72, 67 };
+            // C'' = top = root + 24 = 84 (one octave above C' = 72), NOT 72.
+            const std::vector<int> cycle = { 60, 67, 72, 76, 84, 76, 72, 67 };
 
             expectEquals (data->totalChords, 8);
             for (int i = 0; i < 8; ++i)

@@ -119,8 +119,10 @@ std::vector<int> buildPatternSequence (const std::vector<int>& base,
         case ArpPattern::UpDown:
             if (expandedFromSmall && k == 4)
             {
-                // New 8-note period: b0 b1 b2 b3 top b3 b2 b1
-                // top = root note + 12
+                // New 8-note period: b0 b1 b2 b3 top b3 b2 b1.
+                // The ascending run is b0 b1 b2 b3 top, so top must sit ABOVE
+                // b3 (the highest base note): it is the root one octave above
+                // b2. Since b2 == rootNote + 12, top == rootNote + 24.
                 int rootNote = -1;
                 for (int n : base)
                 {
@@ -133,7 +135,7 @@ std::vector<int> buildPatternSequence (const std::vector<int>& base,
                 if (rootNote < 0)
                     rootNote = base[0];
 
-                const int top = rootNote + 12;
+                const int top = rootNote + 24;
                 seq.reserve (8);
                 seq.push_back (base[0]);
                 seq.push_back (base[1]);
