@@ -1,4 +1,5 @@
 #include "PlaybackBuilder.h"
+#include <algorithm>
 #include <cmath>
 
 namespace reharm
@@ -13,6 +14,42 @@ double PlaybackBuilder::beatsPerStep (ArpRate r)
         case ArpRate::Sixteenth: return 0.25;
     }
     return 0.5;
+}
+
+std::vector<int> PlaybackBuilder::ensureMinArpeggioNotes (std::vector<int> notes, int rootPitchClass)
+{
+    const int k = static_cast<int> (notes.size());
+    if (k <= 1 || k >= 4)
+        return notes;
+
+    if (k == 2)
+    {
+        notes.push_back (notes[0] + 12);
+        notes.push_back (notes[1] + 12);
+        std::sort (notes.begin(), notes.end());
+        return notes;
+    }
+
+    // k == 3: add octave-up root note
+    int rootNote = -1;
+    for (int n : notes)
+    {
+        if ((n % 12) == rootPitchClass)
+        {
+            rootNote = n;
+            break;
+        }
+    }
+    if (rootNote < 0)
+        rootNote = notes[0];
+
+    int candidate = rootNote + 12;
+    while (std::find (notes.begin(), notes.end(), candidate) != notes.end())
+        candidate += 12;
+
+    notes.push_back (candidate);
+    std::sort (notes.begin(), notes.end());
+    return notes;
 }
 
 namespace
@@ -104,6 +141,9 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
             displayIndices.push_back (i);
             continue;
         }
+
+        // Ensure arpeggio has at least 4 notes via octave expansion.
+        chordNotes = ensureMinArpeggioNotes (chordNotes, fc.chord->rootPitchClass);
 
         const auto seq = buildPatternSequence (chordNotes, settings.arpPattern);
         const int seqLen = (int) seq.size();

@@ -18,6 +18,10 @@ public:
     /** Beats per arpeggio step for the given rate: 1.0 / 0.5 / 0.25. */
     static double beatsPerStep (ArpRate r);
 
+    /** Extend arpeggio note sequences to at least 4 notes by octave-shifting.
+        notes must be sorted ascending MIDI notes; rootPitchClass is 0..11. */
+    static std::vector<int> ensureMinArpeggioNotes (std::vector<int> notes, int rootPitchClass);
+
     /** flatten -> trim trailing rests -> (expand arpeggio) -> ChordData.
         displayIndices[engineSlot] = UI flat slot index is always populated
         (identity even when Off; trimmed trailing rests are not included). */

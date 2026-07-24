@@ -88,7 +88,7 @@ public:
             expect (chordNotes == std::vector<int> ({ 60, 64, 67 }));
 
             expectEquals (data->totalChords, 8);
-            const std::vector<int> expectedSeq = { 60, 64, 67, 60, 64, 67, 60, 64 };
+            const std::vector<int> expectedSeq = { 60, 64, 67, 72, 60, 64, 67, 72 };
             for (int i = 0; i < 8; ++i)
             {
                 expectEquals ((int) data->notes[(size_t) i].size(), 1);
@@ -121,10 +121,12 @@ public:
             for (int i = 0; i < 4; ++i)
                 expectEquals (downData->notes[(size_t) i][0], g7Notes[(size_t) (3 - i)]);
 
-            // UpDown with a 2-note dyad (Power5): period should be 2 (n0, n1 repeating).
+            // UpDown with a 2-note dyad (Power5): expands to 4 notes, period 6.
             const Chord power5 { 0, ChordQuality::Power5, -1 };
             const auto power5Notes = Voicing::midiNotes (power5, Voicing::Style::Close);
             expectEquals ((int) power5Notes.size(), 2);
+            const auto power5Expanded = PlaybackBuilder::ensureMinArpeggioNotes (power5Notes, power5.rootPitchClass);
+            expectEquals ((int) power5Expanded.size(), 4);
 
             ProgressionModel modelUpDown;
             modelUpDown.setNumBars (1);
@@ -137,9 +139,9 @@ public:
 
             auto upDownData = PlaybackBuilder::build (modelUpDown, upDownSettings);
             expectEquals (upDownData->totalChords, 8);
-            const std::vector<int> expectedPeriod2 = { power5Notes[0], power5Notes[1] };
+            const std::vector<int> expectedPeriod6 = { power5Expanded[0], power5Expanded[1], power5Expanded[2], power5Expanded[3], power5Expanded[2], power5Expanded[1] };
             for (int i = 0; i < 8; ++i)
-                expectEquals (upDownData->notes[(size_t) i][0], expectedPeriod2[(size_t) (i % 2)]);
+                expectEquals (upDownData->notes[(size_t) i][0], expectedPeriod6[(size_t) (i % 6)]);
 
             // UpDown period-6 check with a 4-note chord (G7): n0 n1 n2 n3 n2 n1 repeating.
             ProgressionModel modelUpDown4;
@@ -153,9 +155,9 @@ public:
 
             auto upDown4Data = PlaybackBuilder::build (modelUpDown4, upDown4Settings);
             expectEquals (upDown4Data->totalChords, 16);
-            const std::vector<int> expectedPeriod6 = { g7Notes[0], g7Notes[1], g7Notes[2], g7Notes[3], g7Notes[2], g7Notes[1] };
+            const std::vector<int> expectedPeriod6_4note = { g7Notes[0], g7Notes[1], g7Notes[2], g7Notes[3], g7Notes[2], g7Notes[1] };
             for (int i = 0; i < 16; ++i)
-                expectEquals (upDown4Data->notes[(size_t) i][0], expectedPeriod6[(size_t) (i % 6)]);
+                expectEquals (upDown4Data->notes[(size_t) i][0], expectedPeriod6_4note[(size_t) (i % 6)]);
         }
 
         beginTest ("Rate differences: Quarter->4 micro-slots per 4-beat slot; Sixteenth->4 micro-slots per 1-beat slot");
@@ -250,6 +252,133 @@ public:
             auto data = PlaybackBuilder::build (model, settings);
             expectEquals ((int) data->cumBeats.size(), data->totalChords + 1);
             expectWithinAbsoluteError (data->cumBeats.back(), data->totalBeats, 1.0e-9);
+        }
+
+        // --- A1: ensureMinArpeggioNotes helper tests ---
+        beginTest ("ensureMinArpeggioNotes: 2-note case {60,67} root=0 -> {60,67,72,79}");
+        {
+            auto result = PlaybackBuilder::ensureMinArpeggioNotes ({60, 67}, 0);
+            expect (result == std::vector<int> ({60, 67, 72, 79}));
+        }
+
+        beginTest ("ensureMinArpeggioNotes: 2-note case {60,64} root=0 -> {60,64,72,76}");
+        {
+            auto result = PlaybackBuilder::ensureMinArpeggioNotes ({60, 64}, 0);
+            expect (result == std::vector<int> ({60, 64, 72, 76}));
+        }
+
+        beginTest ("ensureMinArpeggioNotes: 3-note {60,64,67} root=0 -> {60,64,67,72}");
+        {
+            auto result = PlaybackBuilder::ensureMinArpeggioNotes ({60, 64, 67}, 0);
+            expect (result == std::vector<int> ({60, 64, 67, 72}));
+        }
+
+        beginTest ("ensureMinArpeggioNotes: 3-note {60,64,70} root=0 -> {60,64,70,72}");
+        {
+            auto result = PlaybackBuilder::ensureMinArpeggioNotes ({60, 64, 70}, 0);
+            expect (result == std::vector<int> ({60, 64, 70, 72}));
+        }
+
+        beginTest ("ensureMinArpeggioNotes: 3-note {52,60,64} root=0 -> {52,60,64,72}");
+        {
+            // Root note is 60 (pitch class 0). 60+12=72 not in set, so add 72.
+            auto result = PlaybackBuilder::ensureMinArpeggioNotes ({52, 60, 64}, 0);
+            expect (result == std::vector<int> ({52, 60, 64, 72}));
+        }
+
+        beginTest ("ensureMinArpeggioNotes: 3-note {60,64,72} root=0 -> {60,64,72,84}");
+        {
+            // Root is 60; 60+12=72 already exists; 72+12=84 not in set.
+            auto result = PlaybackBuilder::ensureMinArpeggioNotes ({60, 64, 72}, 0);
+            expect (result == std::vector<int> ({60, 64, 72, 84}));
+        }
+
+        beginTest ("ensureMinArpeggioNotes: 4+ notes unchanged");
+        {
+            auto result = PlaybackBuilder::ensureMinArpeggioNotes ({60, 64, 67, 70}, 0);
+            expect (result == std::vector<int> ({60, 64, 67, 70}));
+        }
+
+        beginTest ("ensureMinArpeggioNotes: 1 note unchanged");
+        {
+            auto result = PlaybackBuilder::ensureMinArpeggioNotes ({60}, 0);
+            expect (result == std::vector<int> ({60}));
+        }
+
+        // --- A1: build() integration tests ---
+        beginTest ("build(): Power5 arp up eighth -> 8 slots cycling 4 expanded notes");
+        {
+            ProgressionModel model;
+            model.setNumBars (1);
+            model.setSubdivision (0, BarSubdivision::One);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Power5, -1 });
+
+            PlaybackSettings settings;
+            settings.voicing = Voicing::Style::Close;
+            settings.arpPattern = ArpPattern::Up;
+            settings.arpRate = ArpRate::Eighth;
+
+            auto data = PlaybackBuilder::build (model, settings);
+
+            const auto baseNotes = Voicing::midiNotes (Chord { 0, ChordQuality::Power5, -1 }, Voicing::Style::Close);
+            const std::vector<int> expanded = { baseNotes[0], baseNotes[1], baseNotes[0] + 12, baseNotes[1] + 12 };
+
+            expectEquals (data->totalChords, 8);
+            for (int i = 0; i < 8; ++i)
+            {
+                expectEquals ((int) data->notes[(size_t) i].size(), 1);
+                expectEquals (data->notes[(size_t) i][0], expanded[(size_t) (i % 4)]);
+                expectWithinAbsoluteError (data->beats[(size_t) i], 0.5, 1.0e-9);
+            }
+        }
+
+        beginTest ("build(): Power5 arp off -> unchanged 2-note block");
+        {
+            ProgressionModel model;
+            model.setNumBars (1);
+            model.setSubdivision (0, BarSubdivision::One);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Power5, -1 });
+
+            PlaybackSettings settings;
+            settings.voicing = Voicing::Style::Close;
+            settings.arpPattern = ArpPattern::Off;
+
+            auto data = PlaybackBuilder::build (model, settings);
+
+            const auto baseNotes = Voicing::midiNotes (Chord { 0, ChordQuality::Power5, -1 }, Voicing::Style::Close);
+            expectEquals (data->totalChords, 1);
+            expect (data->notes[0] == baseNotes);
+            expectWithinAbsoluteError (data->beats[0], 4.0, 1.0e-9);
+        }
+
+        beginTest ("build(): 3-note chord arp updown -> expanded to 4 notes, cycle length 6");
+        {
+            ProgressionModel model;
+            model.setNumBars (1);
+            model.setSubdivision (0, BarSubdivision::One);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
+
+            PlaybackSettings settings;
+            settings.voicing = Voicing::Style::Close;
+            settings.arpPattern = ArpPattern::UpDown;
+            settings.arpRate = ArpRate::Eighth;
+
+            auto data = PlaybackBuilder::build (model, settings);
+
+            const auto baseNotes = Voicing::midiNotes (Chord { 0, ChordQuality::Major, -1 }, Voicing::Style::Close);
+            const std::vector<int> expanded = PlaybackBuilder::ensureMinArpeggioNotes (baseNotes, 0);
+            expectEquals ((int) expanded.size(), 4);
+
+            // UpDown cycle of length 6: n0 n1 n2 n3 n2 n1
+            const std::vector<int> cycle = { expanded[0], expanded[1], expanded[2], expanded[3], expanded[2], expanded[1] };
+
+            expectEquals (data->totalChords, 8);
+            for (int i = 0; i < 8; ++i)
+            {
+                expectEquals ((int) data->notes[(size_t) i].size(), 1);
+                expectEquals (data->notes[(size_t) i][0], cycle[(size_t) (i % 6)]);
+                expectWithinAbsoluteError (data->beats[(size_t) i], 0.5, 1.0e-9);
+            }
         }
     }
 };
