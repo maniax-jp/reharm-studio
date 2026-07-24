@@ -30,6 +30,7 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
+    void modifierKeysChanged (const juce::ModifierKeys& mods) override;
     void resized() override;
 
 private:
@@ -41,6 +42,7 @@ private:
 
     // Drag-to-move state
     bool draggingCell = false;
+    bool dragCopyMode = false;
     int dragSourceBar = -1, dragSourceSlot = -1;
     std::optional<reharm::Chord> dragChord;
     juce::Point<int> dragPos;
@@ -65,6 +67,9 @@ private:
 
     /** Hit active bar/slot without mutating the model (unlike hitTest). */
     std::optional<std::pair<int, int>> cellAt (juce::Point<int> pos);
+
+    /** Like cellAt but scans all bars including ghost bars (bar >= numBars). */
+    std::optional<std::pair<int, int>> dropCellAt (juce::Point<int> pos);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SequencerView)
 };

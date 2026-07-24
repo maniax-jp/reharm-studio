@@ -1,5 +1,6 @@
 #include "SequencerView.h"
 #include "Localization.h"
+#include <cmath>
 #include <optional>
 #include <utility>
 
@@ -159,6 +160,29 @@ void SequencerView::paint (juce::Graphics& g)
         g.drawRoundedRectangle (label.toFloat().reduced (0.5f), 6.0f, 1.0f);
         g.setColour (theme::text);
         g.drawText (name, label, juce::Justification::centred, false);
+
+        // macOS-Finder-style green copy badge (Option/Alt drag)
+        if (dragCopyMode)
+        {
+            const int badgeR = 9;
+            const juce::Point<float> centre (dragPos.x + 18, dragPos.y + 18);
+
+            g.setColour (juce::Colour (0xff28c840));
+            g.fillEllipse (centre.x - badgeR, centre.y - badgeR, badgeR * 2, badgeR * 2);
+
+            g.setColour (juce::Colours::white);
+            g.drawEllipse (centre.x - badgeR, centre.y - badgeR, badgeR * 2, badgeR * 2, 1.5f);
+
+            // White plus sign: arm length ~55% of diameter
+            const int arm = static_cast<int> (std::round (static_cast<float> (badgeR * 2) * 0.55f));
+            const juce::Point<float> p1 (centre.x, centre.y - arm);
+            const juce::Point<float> p2 (centre.x, centre.y + arm);
+            const juce::Point<float> p3 (centre.x - arm, centre.y);
+            const juce::Point<float> p4 (centre.x + arm, centre.y);
+            g.setColour (juce::Colours::white);
+            g.drawLine (juce::Line<float> (p1, p2), 2.0f);
+            g.drawLine (juce::Line<float> (p3, p4), 2.0f);
+        }
     }
 }
 
@@ -487,9 +511,47 @@ std::optional<std::pair<int, int>> SequencerView::cellAt (juce::Point<int> pos)
     return std::nullopt;
 }
 
+std::optional<std::pair<int, int>> SequencerView::dropCellAt (juce::Point<int> pos)
+{
+    if (model == nullptr)
+        return std::nullopt;
+
+    if (layoutDirty)
+    {
+        recomputeLayout();
+        layoutDirty = false;
+    }
+
+    const int numBars = model->getNumBars();
+    for (int bar = 0; bar < kMaxBars; ++bar)
+    {
+        if (! barBounds[bar].contains (pos))
+            continue;
+
+        if (bar < numBars)
+        {
+            const int n = model->getBar (bar).numSlots();
+            for (int slot = 0; slot < n; ++slot)
+            {
+                if (cellBounds[bar][slot].contains (pos))
+                    return std::make_pair (bar, slot);
+            }
+        }
+        else
+        {
+            // Ghost bar: only slot 0 (recomputeLayout computes 1 slot for ghosts)
+            if (cellBounds[bar][0].contains (pos))
+                return std::make_pair (bar, 0);
+        }
+    }
+
+    return std::nullopt;
+}
+
 void SequencerView::mouseDown (const juce::MouseEvent& e)
 {
     draggingCell = false;
+    dragCopyMode = false;
     dropTargetBar = dropTargetSlot = -1;
     dragChord.reset();
     if (auto hit = cellAt (e.getPosition()))
@@ -512,8 +574,9 @@ void SequencerView::mouseDrag (const juce::MouseEvent& e)
     if (! draggingCell && e.getDistanceFromDragStart() < 5)
         return;
     draggingCell = true;
+    dragCopyMode = e.mods.isAltDown();
     dragPos = e.getPosition();
-    if (auto hit = cellAt (dragPos))
+    if (auto hit = dropCellAt (dragPos))
     {
         dropTargetBar = hit->first;
         dropTargetSlot = hit->second;
@@ -525,16 +588,30 @@ void SequencerView::mouseDrag (const juce::MouseEvent& e)
     repaint();
 }
 
+void SequencerView::modifierKeysChanged (const juce::ModifierKeys& mods)
+{
+    if (draggingCell && dragChord.has_value())
+    {
+        const bool newCopy = mods.isAltDown();
+        if (newCopy != dragCopyMode)
+        {
+            dragCopyMode = newCopy;
+            repaint();
+        }
+    }
+}
+
 void SequencerView::mouseUp (const juce::MouseEvent& e)
 {
     if (draggingCell && model != nullptr && dragChord.has_value()
         && dropTargetBar >= 0
         && ! (dropTargetBar == dragSourceBar && dropTargetSlot == dragSourceSlot))
     {
-        const bool copy = e.mods.isAltDown();
         {
             reharm::ProgressionModel::ScopedBulkEdit bulk (*model);
-            if (! copy)
+            if (dropTargetBar >= model->getNumBars())
+                model->setNumBars (dropTargetBar + 1);
+            if (! dragCopyMode)
                 model->setChord (dragSourceBar, dragSourceSlot, std::nullopt);
             model->setChord (dropTargetBar, dropTargetSlot, dragChord);
         }
