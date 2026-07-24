@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(ReharmStudio VERSION 19.0.0)
+project(ReharmStudio VERSION 19.1.0)
 
 # ============================================================================
 # Build-location policy: `build/` is the ONLY canonical build directory.
@@ -58,6 +58,14 @@ juce_add_gui_app(ReharmStudio
 
 juce_generate_juce_header(ReharmStudio)
 
+# Embeds the app icon so the custom About dialog can show it (juce_add_gui_app's
+# ICON_BIG/ICON_SMALL only wire up the OS-level app/bundle icon, not an
+# in-app image resource).
+juce_add_binary_data(ReharmStudioData
+    SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/Assets/AppIcon_1024.png"
+)
+
 target_sources(ReharmStudio PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
@@ -79,6 +87,7 @@ target_sources(ReharmStudio PRIVATE
 reharm_apply_common_definitions(ReharmStudio)
 
 target_link_libraries(ReharmStudio PRIVATE
+    ReharmStudioData
     juce::juce_audio_basics
     juce::juce_audio_devices
     juce::juce_audio_formats
