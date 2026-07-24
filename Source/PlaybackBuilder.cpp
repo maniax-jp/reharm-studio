@@ -196,20 +196,33 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
             continue;
         }
 
-        auto chordNotes = Voicing::midiNotes (*fc.chord, settings.voicing);
-
-        if (chordNotes.empty())
+        if (settings.arpPattern == ArpPattern::Off)
         {
-            // Should not happen in practice, but treat like a rest.
-            notes.emplace_back();
+            // Block chord: the voicing (Close/Open) applies here.
+            auto chordNotes = Voicing::midiNotes (*fc.chord, settings.voicing);
+            if (chordNotes.empty())
+            {
+                notes.emplace_back();
+                beats.push_back (fc.beats);
+                displayIndices.push_back (i);
+                continue;
+            }
+            notes.push_back (chordNotes);
             beats.push_back (fc.beats);
             displayIndices.push_back (i);
             continue;
         }
 
-        if (settings.arpPattern == ArpPattern::Off)
+        // Arpeggio: voicing (Close/Open) does NOT apply. The UI leaves both
+        // voicing options unselected once an arpeggio is chosen, so the arpeggio
+        // is always built from the chord's plain stacked tones (root-position,
+        // Close), independent of whatever voicing was last selected.
+        auto chordNotes = Voicing::midiNotes (*fc.chord, Voicing::Style::Close);
+
+        if (chordNotes.empty())
         {
-            notes.push_back (chordNotes);
+            // Should not happen in practice, but treat like a rest.
+            notes.emplace_back();
             beats.push_back (fc.beats);
             displayIndices.push_back (i);
             continue;

@@ -376,6 +376,34 @@ public:
             }
         }
 
+        beginTest ("build(): arpeggio ignores voicing (Open == Close for every pattern)");
+        {
+            // Arpeggios must not depend on the Close/Open voicing setting: the UI
+            // leaves voicing unselected once an arpeggio is picked. Regression test
+            // for the bug where Open voicing (drop-2 + bass) corrupted the arpeggio.
+            for (auto quality : { ChordQuality::Power5, ChordQuality::Major,
+                                  ChordQuality::Minor, ChordQuality::Dominant7 })
+            {
+                for (auto pattern : { ArpPattern::Up, ArpPattern::Down, ArpPattern::UpDown })
+                {
+                    ProgressionModel model;
+                    model.setNumBars (1);
+                    model.setSubdivision (0, BarSubdivision::One);
+                    model.setChord (0, 0, Chord { 0, quality, -1 });
+
+                    PlaybackSettings closeS { Voicing::Style::Close, pattern, ArpRate::Eighth };
+                    PlaybackSettings openS  { Voicing::Style::Open,  pattern, ArpRate::Eighth };
+
+                    auto closeData = PlaybackBuilder::build (model, closeS);
+                    auto openData  = PlaybackBuilder::build (model, openS);
+
+                    expectEquals (openData->totalChords, closeData->totalChords);
+                    for (int i = 0; i < closeData->totalChords; ++i)
+                        expect (openData->notes[(size_t) i] == closeData->notes[(size_t) i]);
+                }
+            }
+        }
+
         beginTest ("build(): Major7 (4 notes) arp updown -> legacy period-6 pattern");
         {
             ProgressionModel model;
