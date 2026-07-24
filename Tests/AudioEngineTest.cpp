@@ -294,6 +294,71 @@ public:
                     "getPluginInstance should return the loaded plugin");
         }
 
+        // ===== 新テスト: UnloadPluginWithoutLoadDoesNotCrash =====
+        beginTest ("UnloadPluginWithoutLoadDoesNotCrash");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+
+            // プラグイン未ロード状態でunloadPluginを呼んでもクラッシュしないことを確認
+            engine.unloadPlugin();
+
+            expect (engine.getPluginInstance() == nullptr,
+                    "getPluginInstance should remain nullptr after unload without load");
+        }
+
+        // ===== 新テスト: UnloadPluginClearsInstance =====
+        beginTest ("UnloadPluginClearsInstance");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+
+            auto mock = std::make_unique<MockPluginInstance>();
+            engine.loadPluginInstance (std::move (mock), 44100.0, 512);
+            expect (engine.getPluginInstance() != nullptr,
+                    "getPluginInstance should return the loaded plugin before unload");
+
+            engine.unloadPlugin();
+
+            expect (engine.getPluginInstance() == nullptr,
+                    "getPluginInstance should return nullptr after unloadPlugin");
+        }
+
+        // ===== 新テスト: FallbackSynthWorksAfterUnloadPlugin =====
+        beginTest ("FallbackSynthWorksAfterUnloadPlugin");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+            engine.setBpm (120);
+
+            auto mock = std::make_unique<MockPluginInstance>();
+            engine.loadPluginInstance (std::move (mock), 44100.0, 512);
+            engine.unloadPlugin();
+
+            auto chordData = std::make_shared<ChordData>();
+            chordData->totalChords = 1;
+            chordData->notes.push_back ({60, 64, 67});
+            chordData->beats.push_back (4.0);
+            chordData->totalBeats = 4.0;
+            engine.setChordData (chordData);
+            engine.startPlayback();
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+
+            // prepareToPlay + processBlock がクラッシュせず、フォールバックシンセ経路で
+            // 音が鳴ることを確認する。
+            for (int i = 0; i < 10; ++i)
+            {
+                buffer.clear();
+                midi.clear();
+                engine.processBlock (buffer, midi);
+            }
+
+            expect (buffer.getMagnitude (0, 0, 512) > 0.0f,
+                    "Fallback synth should produce audio after unloadPlugin");
+        }
+
         // ===== 復元テスト: NewConstructorVariableBeats =====
         beginTest ("NewConstructorVariableBeats");
         {

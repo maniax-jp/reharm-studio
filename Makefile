@@ -40,7 +40,7 @@ release-check: app test
 	@echo "release-check OK — build/ (正規ビルドディレクトリ) でアプリ本体をビルドし、全テスト通過。"
 
 agent-test:
-	@test -n "$(AGENT)" || { echo "使い方: make agent-test AGENT=codex|grok"; exit 1; }
+	@test -n "$(AGENT)" || { echo "使い方: make agent-test AGENT=codex|grok|sonnet"; exit 1; }
 	cmake --preset agent-$(AGENT)
 	cmake --build --preset agent-$(AGENT) --target ReharmStudioTests --parallel
 	./.agent-builds/$(AGENT)/ReharmStudioTests_artefacts/Debug/ReharmStudioTests

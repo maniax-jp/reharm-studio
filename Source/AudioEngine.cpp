@@ -453,6 +453,23 @@ void AudioEngine::loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> 
     std::atomic_store(&mPluginReady, true);
 }
 
+void AudioEngine::unloadPlugin()
+{
+    beginPluginLoad();
+
+    {
+        juce::ScopedLock sl (pluginLock);
+        std::atomic_store(&mPluginReady, false);
+        if (mPluginInstance != nullptr)
+        {
+            mPluginInstance->releaseResources();
+            mPluginInstance.reset();
+        }
+    }
+
+    endPluginLoad();
+}
+
 void AudioEngine::setBpm(int newBpm)
 {
     // A4: BPMを1〜999にクランプ

@@ -1,4 +1,5 @@
 #include "TransportBar.h"
+#include "Localization.h"
 
 //==============================================================================
 PlayStopButton::PlayStopButton()
@@ -166,6 +167,17 @@ TransportBar::TransportBar()
         if (onLoadPlugin)
             onLoadPlugin();
     };
+    loadButton.onRightClick = [this]
+    {
+        juce::PopupMenu menu;
+        menu.addItem (reharm::loc::tr ("Unload VST3"), pluginLoaded, false,
+                      [this]
+                      {
+                          if (onUnloadPlugin)
+                              onUnloadPlugin();
+                      });
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&loadButton));
+    };
     addAndMakeVisible (loadButton);
 
     pluginNameButton.setColour (juce::TextButton::textColourOffId, theme::textDim);
@@ -200,6 +212,8 @@ void TransportBar::setVolume (float volume01)
 
 void TransportBar::setPluginName (const juce::String& name)
 {
+    pluginLoaded = name.isNotEmpty();
+
     if (name.isEmpty())
     {
         pluginNameButton.setButtonText ("No Plugin");

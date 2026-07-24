@@ -67,6 +67,25 @@ MainComponent::MainComponent()
 
     headerBar.onSaveRequested = [this] { promptSaveUserPreset(); };
     headerBar.onUserPresetSelected = [this] (const juce::String& name) { loadUserPreset (name); };
+    headerBar.onUserPresetDeleteRequested = [this] (const juce::String& name)
+    {
+        juce::NativeMessageBox::showOkCancelBox (
+            juce::MessageBoxIconType::QuestionIcon,
+            reharm::loc::tr ("Delete Preset"),
+            reharm::loc::deleteConfirmMessage (name),
+            this,
+            juce::ModalCallbackFunction::create ([this, name] (int ok)
+            {
+                if (ok != 1)
+                    return;
+                if (stateStore.deleteUserPreset (name))
+                {
+                    if (lastUserPresetName == name)
+                        lastUserPresetName.clear();
+                    headerBar.setUserPresets (stateStore.listUserPresetNames());
+                }
+            }));
+    };
 
     headerBar.onPlayStyleChanged = [this] (reharm::ArpPattern p)
     {
@@ -109,6 +128,7 @@ MainComponent::MainComponent()
     };
     transportBar.onLoadPlugin = [this] { loadPlugin(); };
     transportBar.onOpenPluginEditor = [this] { openPluginEditor(); };
+    transportBar.onUnloadPlugin = [this] { unloadPlugin(); };
     transportBar.onPrepareMidiDragFile = [this]() -> juce::File
     {
         reharm::PlaybackSettings settings { display.voicingStyle, display.arpPattern, display.arpRate };
@@ -171,6 +191,14 @@ MainComponent::MainComponent()
     setAudioChannels (0, 2);
     startTimer (50);
 
+    commandManager.registerAllCommandsForTarget (this);
+    setApplicationCommandManagerToWatch (&commandManager);
+
+   #if JUCE_MAC
+    extraAppleMenu.addItem (reharm::loc::tr ("About Reharm Studio"), [this] { showAboutDialog(); });
+    juce::MenuBarModel::setMacMainMenu (this, &extraAppleMenu);
+   #endif
+
     if (restored && sessionData.pluginPath.isNotEmpty())
     {
         juce::Component::SafePointer<MainComponent> safe (this);
@@ -208,39 +236,66 @@ bool MainComponent::keyPressed (const juce::KeyPress& key)
         if (mods.isShiftDown()) performRedo(); else performUndo();
         return true;
     }
+    if (mods.isCommandDown() && lower == 'x')
+    {
+        performCut();
+        return true;
+    }
     if (mods.isCommandDown() && lower == 'c')
     {
-        if (display.hasSelection())
-            if (auto c = model.getChord (display.selectedBar, display.selectedSlot))
-            {
-                display.chordClipboard = c;
-                return true;
-            }
-        return false;
+        performCopy();
+        return true;
     }
     if (mods.isCommandDown() && lower == 'v')
     {
-        if (display.hasSelection() && display.chordClipboard.has_value())
-        {
-            model.setChord (display.selectedBar, display.selectedSlot, display.chordClipboard);
-            return true;
-        }
-        return false;
+        performPaste();
+        return true;
     }
     if (code == juce::KeyPress::deleteKey || code == juce::KeyPress::backspaceKey)
     {
-        if (display.hasSelection())
-        {
-            model.setChord (display.selectedBar, display.selectedSlot, std::nullopt);
-            display.clearSelection();
-            updateEditorVisibility();
-            sequencerView.repaint();
-            return true;
-        }
-        return false;
+        performDeleteSelection();
+        return true;
     }
 
     return false;
+}
+
+void MainComponent::performCopy()
+{
+    if (display.hasSelection())
+        if (auto c = model.getChord (display.selectedBar, display.selectedSlot))
+        {
+            display.chordClipboard = c;
+            commandManager.commandStatusChanged();
+        }
+}
+
+void MainComponent::performPaste()
+{
+    if (display.hasSelection() && display.chordClipboard.has_value())
+        model.setChord (display.selectedBar, display.selectedSlot, display.chordClipboard);
+}
+
+void MainComponent::performCut()
+{
+    const bool hadChord = display.hasSelection()
+        && model.getChord (display.selectedBar, display.selectedSlot).has_value();
+    if (! hadChord)
+        return;
+
+    performCopy();
+    performDeleteSelection();
+}
+
+void MainComponent::performDeleteSelection()
+{
+    if (display.hasSelection())
+    {
+        model.setChord (display.selectedBar, display.selectedSlot, std::nullopt);
+        display.clearSelection();
+        updateEditorVisibility();
+        sequencerView.repaint();
+    }
 }
 
 // KeyListener callback: registered on the top-level window so the space bar
@@ -258,6 +313,10 @@ void MainComponent::visibilityChanged()
 
 MainComponent::~MainComponent()
 {
+   #if JUCE_MAC
+    juce::MenuBarModel::setMacMainMenu (nullptr);
+   #endif
+
     stopTimer();
     autosaveTimer.stopTimer();
     refreshPluginStateCache();
@@ -316,6 +375,7 @@ void MainComponent::updateEditorVisibility()
 {
     chordEditor.setVisible (display.hasSelection());
     resized();
+    commandManager.commandStatusChanged();
 }
 
 void MainComponent::handleModelChanged()
@@ -332,6 +392,7 @@ void MainComponent::handleModelChanged()
         pushChordDataToEngine();
 
     markSessionDirty();
+    commandManager.commandStatusChanged();
 }
 
 void MainComponent::applyHistoryState (const reharm::ProgressionState& s)
@@ -690,4 +751,132 @@ void MainComponent::loadPluginFromFile (const juce::File& file,
                 "Plugin Load Failed",
                 "No valid VST3 plugin was found in the selected file.");
     }
+}
+
+void MainComponent::unloadPlugin()
+{
+    stopPlayback();
+    editorWindow.reset();
+    audioEngine->unloadPlugin();
+
+    sessionData.pluginPath = {};
+    sessionData.pluginName = {};
+    sessionData.pluginStateB64 = {};
+
+    transportBar.setPluginName ({});
+    markSessionDirty();
+}
+
+//==============================================================================
+// juce::MenuBarModel
+
+juce::StringArray MainComponent::getMenuBarNames()
+{
+    return { reharm::loc::tr ("Edit"), reharm::loc::tr ("Help") };
+}
+
+juce::PopupMenu MainComponent::getMenuForIndex (int topLevelMenuIndex, const juce::String&)
+{
+    juce::PopupMenu menu;
+
+    if (topLevelMenuIndex == 0)
+    {
+        menu.addCommandItem (&commandManager, CommandIDs::undo);
+        menu.addCommandItem (&commandManager, CommandIDs::redo);
+        menu.addSeparator();
+        menu.addCommandItem (&commandManager, CommandIDs::cut);
+        menu.addCommandItem (&commandManager, CommandIDs::copy);
+        menu.addCommandItem (&commandManager, CommandIDs::paste);
+        menu.addCommandItem (&commandManager, CommandIDs::deleteChord);
+    }
+    else if (topLevelMenuIndex == 1)
+    {
+        menu.addItem (reharm::loc::tr ("Version Info"), [this] { showAboutDialog(); });
+    }
+
+    return menu;
+}
+
+void MainComponent::menuItemSelected (int, int)
+{
+}
+
+//==============================================================================
+// juce::ApplicationCommandTarget
+
+juce::ApplicationCommandTarget* MainComponent::getNextCommandTarget()
+{
+    return nullptr;
+}
+
+void MainComponent::getAllCommands (juce::Array<juce::CommandID>& commands)
+{
+    commands.addArray ({ CommandIDs::undo, CommandIDs::redo,
+                         CommandIDs::cut, CommandIDs::copy,
+                         CommandIDs::paste, CommandIDs::deleteChord });
+}
+
+void MainComponent::getCommandInfo (juce::CommandID commandID, juce::ApplicationCommandInfo& result)
+{
+    switch (commandID)
+    {
+        case CommandIDs::undo:
+            result.setInfo (reharm::loc::tr ("Undo"), reharm::loc::tr ("Undo"), "Edit", 0);
+            result.addDefaultKeypress ('z', juce::ModifierKeys::commandModifier);
+            result.setActive (undoHistory.canUndo());
+            break;
+        case CommandIDs::redo:
+            result.setInfo (reharm::loc::tr ("Redo"), reharm::loc::tr ("Redo"), "Edit", 0);
+            result.addDefaultKeypress ('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+            result.setActive (undoHistory.canRedo());
+            break;
+        case CommandIDs::cut:
+            result.setInfo (reharm::loc::tr ("Cut"), reharm::loc::tr ("Cut"), "Edit", 0);
+            result.addDefaultKeypress ('x', juce::ModifierKeys::commandModifier);
+            result.setActive (display.hasSelection()
+                              && model.getChord (display.selectedBar, display.selectedSlot).has_value());
+            break;
+        case CommandIDs::copy:
+            result.setInfo (reharm::loc::tr ("Copy"), reharm::loc::tr ("Copy"), "Edit", 0);
+            result.addDefaultKeypress ('c', juce::ModifierKeys::commandModifier);
+            result.setActive (display.hasSelection()
+                              && model.getChord (display.selectedBar, display.selectedSlot).has_value());
+            break;
+        case CommandIDs::paste:
+            result.setInfo (reharm::loc::tr ("Paste"), reharm::loc::tr ("Paste"), "Edit", 0);
+            result.addDefaultKeypress ('v', juce::ModifierKeys::commandModifier);
+            result.setActive (display.hasSelection() && display.chordClipboard.has_value());
+            break;
+        case CommandIDs::deleteChord:
+            result.setInfo (reharm::loc::tr ("Delete"), reharm::loc::tr ("Delete"), "Edit", 0);
+            result.addDefaultKeypress (juce::KeyPress::backspaceKey, juce::ModifierKeys::noModifiers);
+            result.setActive (display.hasSelection());
+            break;
+        default:
+            break;
+    }
+}
+
+bool MainComponent::perform (const InvocationInfo& info)
+{
+    switch (info.commandID)
+    {
+        case CommandIDs::undo:        performUndo(); return true;
+        case CommandIDs::redo:        performRedo(); return true;
+        case CommandIDs::cut:         performCut(); return true;
+        case CommandIDs::copy:        performCopy(); return true;
+        case CommandIDs::paste:       performPaste(); return true;
+        case CommandIDs::deleteChord: performDeleteSelection(); return true;
+        default: break;
+    }
+    return false;
+}
+
+void MainComponent::showAboutDialog()
+{
+    const juce::String message = reharm::loc::tr ("Version") + " " + juce::String (ProjectInfo::versionString);
+    juce::NativeMessageBox::showMessageBoxAsync (
+        juce::MessageBoxIconType::InfoIcon,
+        "Reharm Studio",
+        message);
 }

@@ -357,6 +357,19 @@ bool StateStore::loadUserPreset (const juce::String& name, ProgressionModel& mod
     return deserialize (parsed, model, s);
 }
 
+bool StateStore::deleteUserPreset (const juce::String& name) const
+{
+    const auto sanitized = sanitizePresetName (name);
+    if (sanitized.isEmpty())
+        return false;
+
+    const auto file = presetsDir().getChildFile (sanitized + ".json");
+    if (! file.existsAsFile())
+        return false;
+
+    return file.deleteFile();
+}
+
 juce::String StateStore::sanitizePresetName (const juce::String& raw)
 {
     return juce::File::createLegalFileName (raw).trim();

@@ -35,9 +35,24 @@ public:
     }
 };
 
+namespace CommandIDs
+{
+    enum
+    {
+        undo = 1,
+        redo,
+        cut,
+        copy,
+        paste,
+        deleteChord
+    };
+}
+
 class MainComponent : public juce::AudioAppComponent,
                       public juce::Timer,
-                      public juce::KeyListener
+                      public juce::KeyListener,
+                      public juce::MenuBarModel,
+                      public juce::ApplicationCommandTarget
 {
 public:
     MainComponent();
@@ -54,6 +69,17 @@ public:
     void visibilityChanged() override;
 
     void timerCallback() override;
+
+    // juce::MenuBarModel
+    juce::StringArray getMenuBarNames() override;
+    juce::PopupMenu getMenuForIndex (int topLevelMenuIndex, const juce::String& menuName) override;
+    void menuItemSelected (int menuItemID, int topLevelMenuIndex) override;
+
+    // juce::ApplicationCommandTarget
+    juce::ApplicationCommandTarget* getNextCommandTarget() override;
+    void getAllCommands (juce::Array<juce::CommandID>& commands) override;
+    void getCommandInfo (juce::CommandID commandID, juce::ApplicationCommandInfo& result) override;
+    bool perform (const InvocationInfo& info) override;
 
 private:
     void loadPlugin();
@@ -83,8 +109,20 @@ private:
     void performRedo();
     void validateSelection();
 
+    void performCopy();
+    void performPaste();
+    void performCut();
+    void performDeleteSelection();
+    void showAboutDialog();
+    void unloadPlugin();
+
     std::unique_ptr<ReharmLookAndFeel> lookAndFeel;
     std::unique_ptr<AudioEngine> audioEngine;
+
+    juce::ApplicationCommandManager commandManager;
+   #if JUCE_MAC
+    juce::PopupMenu extraAppleMenu;
+   #endif
 
     reharm::ProgressionModel model;
     DisplayState display;

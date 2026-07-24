@@ -92,6 +92,17 @@
       "cacheVariables": {
         "BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "agent-sonnet",
+      "displayName": "[SANDBOX] sonnet agent (NOT release verification)",
+      "description": "Per-agent scratch build for parallel work. Test results here NEVER count as release verification -- rerun with `make release-check` (build/).",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/.agent-builds/sonnet",
+      "inherits": "default",
+      "cacheVariables": {
+        "BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -134,6 +145,11 @@
       "name": "agent-grok",
       "displayName": "[SANDBOX] grok agent (NOT release verification)",
       "configurePreset": "agent-grok"
+    },
+    {
+      "name": "agent-sonnet",
+      "displayName": "[SANDBOX] sonnet agent (NOT release verification)",
+      "configurePreset": "agent-sonnet"
     }
   ]
 }

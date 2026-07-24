@@ -49,6 +49,28 @@ private:
 };
 
 /**
+ * TextButton subclass that reports right-clicks separately from left-clicks,
+ * so callers can show a context menu (e.g. "Unload VST3") without disturbing
+ * the normal left-click action.
+ */
+class RightClickableButton : public juce::TextButton
+{
+public:
+    using juce::TextButton::TextButton;
+    std::function<void()> onRightClick;
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
+        juce::TextButton::mouseDown (e);
+    }
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isPopupMenu()) return;
+        juce::TextButton::mouseUp (e);
+    }
+};
+
+/**
  * Transport: play/stop, BPM, volume, VST3 load + plugin name.
  */
 class TransportBar : public juce::Component
@@ -68,6 +90,7 @@ public:
     std::function<void()> onLoadPlugin;
     std::function<void()> onOpenPluginEditor;
     std::function<juce::File()> onPrepareMidiDragFile;
+    std::function<void()> onUnloadPlugin;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -78,9 +101,10 @@ private:
     juce::Label bpmLabel;
     juce::Slider volumeSlider;
     juce::Label volumeLabel;
-    juce::TextButton loadButton { "Load VST3" };
+    RightClickableButton loadButton { "Load VST3" };
     juce::TextButton pluginNameButton { "No Plugin" };
     MidiDragBadge midiBadge;
+    bool pluginLoaded = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TransportBar)
 };

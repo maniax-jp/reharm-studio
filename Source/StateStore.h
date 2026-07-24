@@ -52,6 +52,10 @@ public:
     bool saveUserPreset (const juce::String& name, const ProgressionModel& model, const SessionData& s) const;
     bool loadUserPreset (const juce::String& name, ProgressionModel& model, SessionData& s) const;
 
+    /** Sanitizes name and deletes the preset file. Returns false if the name is
+        empty after sanitize, or the file does not exist. */
+    bool deleteUserPreset (const juce::String& name) const;
+
     /** File::createLegalFileName plus leading/trailing whitespace trim.
         Returns an empty string when the result would be empty. */
     static juce::String sanitizePresetName (const juce::String& raw);

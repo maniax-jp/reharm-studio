@@ -287,6 +287,40 @@ public:
 
             expect (StateStore::sanitizePresetName ("   ").isEmpty());
         }
+
+        beginTest ("deleteUserPreset: removes saved preset; missing/empty names fail");
+        {
+            auto tempBase = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                .getChildFile ("reharm-statestore-delete-test");
+            tempBase.deleteRecursively();
+
+            StateStore store (tempBase);
+
+            ProgressionModel model;
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
+            StateStore::SessionData s;
+
+            expect (store.saveUserPreset ("ToDelete", model, s));
+            expect (store.userPresetExists ("ToDelete"));
+            expect (store.deleteUserPreset ("ToDelete"));
+            expect (! store.userPresetExists ("ToDelete"));
+            expect (! store.listUserPresetNames().contains ("ToDelete"));
+
+            expect (! store.deleteUserPreset ("DoesNotExist"));
+            expect (! store.deleteUserPreset (""));
+            expect (! store.deleteUserPreset ("   "));
+
+            // Sanitize consistency: symbols that createLegalFileName rewrites must
+            // still delete when the same raw string used for save is passed in.
+            const juce::String rawWithSymbols = "a/b:c";
+            expect (store.saveUserPreset (rawWithSymbols, model, s));
+            const auto sanitized = StateStore::sanitizePresetName (rawWithSymbols);
+            expect (store.userPresetExists (sanitized));
+            expect (store.deleteUserPreset (rawWithSymbols));
+            expect (! store.userPresetExists (sanitized));
+
+            tempBase.deleteRecursively();
+        }
     }
 };
 

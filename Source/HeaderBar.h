@@ -6,7 +6,7 @@
 #include "PlaybackSettings.h"
 
 /**
- * Top bar: title, key/scale, preset picker, Close|Open toggle.
+ * Top bar: title, key/scale, preset picker, play-mode menu.
  */
 
 class HeaderBar : public juce::Component
@@ -20,18 +20,18 @@ public:
     void setPlayStyle (reharm::ArpPattern pattern);
     void setArpRate (reharm::ArpRate rate);
 
-    /** Rebuilds the presetBox with the built-in presets plus a "User" section
-        listing the given names (id = 1000 + index into names). */
+    /** Stores user preset names for the next preset popup menu.
+        Built-in presets are always listed; user names appear under a "User" section. */
     void setUserPresets (const juce::StringArray& names);
 
     std::function<void (int tonicPitchClass, bool isMajor)> onKeyChanged;
     std::function<void (const reharm::PresetProgression&)> onPresetSelected;
     std::function<void (bool closeVoicing)> onVoicingChanged;
     std::function<void (const juce::String& name)> onUserPresetSelected;
+    std::function<void (const juce::String& name)> onUserPresetDeleteRequested;
     std::function<void()> onSaveRequested;
     std::function<void (reharm::ArpPattern)> onPlayStyleChanged;
     std::function<void (reharm::ArpRate)> onArpRateChanged;
-
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -39,16 +39,23 @@ public:
 private:
     juce::ComboBox keyBox;
     juce::ComboBox scaleBox;
-    juce::ComboBox presetBox;
+    juce::TextButton presetButton;
     juce::TextButton saveButton;
+    juce::TextButton playModeButton;
     juce::StringArray userPresetNames;
-    SegmentedToggle voicingToggle { "Close", "Open" };
-    juce::ComboBox playStyleBox;
-    juce::ComboBox arpRateBox;
+    juce::String pendingDeleteName;
 
+    bool voicingClose = true;
+    reharm::ArpPattern pattern = reharm::ArpPattern::Off;
+    reharm::ArpRate rate = reharm::ArpRate::Eighth;
 
     void handleKeyOrScaleChanged();
-    void handlePresetChanged();
+    void showPresetMenu();
+    void handlePresetMenuResult (int resultId);
+    void showPlayModeMenu();
+    void handlePlayModeMenuResult (int resultId);
+    void updatePlayModeButtonLabel();
+    static juce::String rateLabel (reharm::ArpRate r);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeaderBar)
 };

@@ -89,9 +89,32 @@ inline juce::String tr (const juce::String& key)
         { "Overwrite preset?",   "\xE5\x90\x8C\xE5\x90\x8D\xE3\x81\xAE\xE9\x80\xB2\xE8\xA1\x8C\xE3\x82\x92\xE4\xB8\x8A\xE6\x9B\xB8\xE3\x81\x8D\xE3\x81\xBE\xE3\x81\x99\xE3\x81\x8B?" }, // 同名の進行を上書きしますか?
         { "Cancel",              "\xE3\x82\xAD\xE3\x83\xA3\xE3\x83\xB3\xE3\x82\xBB\xE3\x83\xAB" },                                                          // キャンセル
         { "Block",               "\xE3\x83\x96\xE3\x83\xAD\xE3\x83\x83\xE3\x82\xAF" },                                                                      // ブロック
+        { "Block Chord",         "\xE3\x83\x96\xE3\x83\xAD\xE3\x83\x83\xE3\x82\xAF\xE3\x82\xB3\xE3\x83\xBC\xE3\x83\x89" },                                  // ブロックコード
+        { "Close Voicing",       "\xE3\x82\xAF\xE3\x83\xAD\xE3\x83\xBC\xE3\x82\xBA\xE3\x83\x9C\xE3\x82\xA4\xE3\x82\xB7\xE3\x83\xB3\xE3\x82\xB0" },          // クローズボイシング
+        { "Open Voicing",        "\xE3\x82\xAA\xE3\x83\xBC\xE3\x83\x97\xE3\x83\xB3\xE3\x83\x9C\xE3\x82\xA4\xE3\x82\xB7\xE3\x83\xB3\xE3\x82\xB0" },          // オープンボイシング
+        { "Block Chord (Close)", "\xE3\x83\x96\xE3\x83\xAD\xE3\x83\x83\xE3\x82\xAF\xE3\x82\xB3\xE3\x83\xBC\xE3\x83\x89\xEF\xBC\x88\xE3\x82\xAF\xE3\x83\xAD\xE3\x83\xBC\xE3\x82\xBA\xEF\xBC\x89" }, // ブロックコード（クローズ）
+        { "Block Chord (Open)",  "\xE3\x83\x96\xE3\x83\xAD\xE3\x83\x83\xE3\x82\xAF\xE3\x82\xB3\xE3\x83\xBC\xE3\x83\x89\xEF\xBC\x88\xE3\x82\xAA\xE3\x83\xBC\xE3\x83\x97\xE3\x83\xB3\xEF\xBC\x89" }, // ブロックコード（オープン）
         { "Arp Up",              "\xE3\x82\xA2\xE3\x83\xAB\xE3\x83\x9A\xE3\x82\xB8\xE3\x82\xAA \xE4\xB8\x8A\xE8\xA1\x8C" },                                  // アルペジオ 上行
         { "Arp Down",            "\xE3\x82\xA2\xE3\x83\xAB\xE3\x83\x9A\xE3\x82\xB8\xE3\x82\xAA \xE4\xB8\x8B\xE8\xA1\x8C" },                                  // アルペジオ 下行
         { "Arp Up-Down",         "\xE3\x82\xA2\xE3\x83\xAB\xE3\x83\x9A\xE3\x82\xB8\xE3\x82\xAA \xE4\xB8\x8A\xE4\xB8\x8B" },                                  // アルペジオ 上下
+        { "Delete...",           "\xE5\x89\x8A\xE9\x99\xA4..." },                                                                                            // 削除...
+        { "Delete Preset",       "\xE3\x83\x97\xE3\x83\xAA\xE3\x82\xBB\xE3\x83\x83\xE3\x83\x88\xE3\x81\xAE\xE5\x89\x8A\xE9\x99\xA4" },                      // プリセットの削除
+
+        // Menu bar (package C)
+        { "Edit",                "\xE7\xB7\xA8\xE9\x9B\x86" },                                                                                              // 編集
+        { "Help",                "\xE3\x83\x98\xE3\x83\xAB\xE3\x83\x97" },                                                                                  // ヘルプ
+        { "Undo",                "\xE5\x8F\x96\xE3\x82\x8A\xE6\xB6\x88\xE3\x81\x99" },                                                                      // 取り消す
+        { "Redo",                "\xE3\x82\x84\xE3\x82\x8A\xE7\x9B\xB4\xE3\x81\x99" },                                                                      // やり直す
+        { "Cut",                 "\xE3\x82\xAB\xE3\x83\x83\xE3\x83\x88" },                                                                                  // カット
+        { "Copy",                "\xE3\x82\xB3\xE3\x83\x94\xE3\x83\xBC" },                                                                                  // コピー
+        { "Paste",               "\xE3\x83\x9A\xE3\x83\xBC\xE3\x82\xB9\xE3\x83\x88" },                                                                      // ペースト
+        { "Delete",              "\xE5\x89\x8A\xE9\x99\xA4" },                                                                                              // 削除
+        { "About Reharm Studio", "Reharm Studio \xE3\x81\xAB\xE3\x81\xA4\xE3\x81\x84\xE3\x81\xA6" },                                                        // Reharm Studio について
+        { "Version Info",        "\xE3\x83\x90\xE3\x83\xBC\xE3\x82\xB8\xE3\x83\xA7\xE3\x83\xB3\xE6\x83\x85\xE5\xA0\xB1" },                                  // バージョン情報
+        { "Version",             "\xE3\x83\x90\xE3\x83\xBC\xE3\x82\xB8\xE3\x83\xA7\xE3\x83\xB3" },                                                          // バージョン
+
+        // TransportBar VST3 unload (package C)
+        { "Unload VST3",         "VST3\xE3\x82\x92\xE3\x82\xA2\xE3\x83\xB3\xE3\x83\xAD\xE3\x83\xBC\xE3\x83\x89" },                                          // VST3をアンロード
     };
 
     for (const auto& e : table)
@@ -108,6 +131,13 @@ inline juce::String trLabel (const juce::String& label)
     if (paren > 0)
         return tr (label.substring (0, paren)) + label.substring (paren);
     return tr (label);
+}
+
+/** 「<name>」を削除しますか？ */
+inline juce::String deleteConfirmMessage (const juce::String& name)
+{
+    return juce::String::fromUTF8 ("\xE3\x80\x8C") + name
+         + juce::String::fromUTF8 ("\xE3\x80\x8D\xE3\x82\x92\xE5\x89\x8A\xE9\x99\xA4\xE3\x81\x97\xE3\x81\xBE\xE3\x81\x99\xE3\x81\x8B\xEF\xBC\x9F");
 }
 
 } // namespace loc

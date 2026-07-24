@@ -122,6 +122,7 @@ public:
     void endPluginLoad();
     bool isPluginLoading() const { return mLoadingPlugin.load(); }
     void loadPluginInstance(std::unique_ptr<juce::AudioPluginInstance> plugin, double sampleRate, int blockSize);
+    void unloadPlugin();
 
     /** Index of the slot currently sounding, or -1 when stopped. Safe from any thread. */
     int getCurrentPlayingSlot() const
