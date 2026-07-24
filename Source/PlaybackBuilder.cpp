@@ -35,59 +35,18 @@ std::vector<int> PlaybackBuilder::arpeggioBaseNotes (std::vector<int> notes, int
         return result;
     }
 
-    // k == 3: TRIAD -> [root, 5th, root+12, 3rd+12]
-    // Identify root note
-    int rootNote = -1;
-    for (int n : notes)
-    {
-        if ((n % 12) == rootPitchClass)
-        {
-            rootNote = n;
-            break;
-        }
-    }
-    if (rootNote < 0)
-        rootNote = notes[0];
+    // k == 3: TRIAD -> {n0, n2, n0+12, n1+12}, i.e. the outer two tones first,
+    // then the octave-up root followed by the octave-up middle tone. Because the
+    // input is a Close voicing it is already ascending, so n1/n2 are simply the
+    // lower and upper non-root tones - no interval analysis is needed.
+    //
+    // Deliberately positional rather than role-based (3rd/5th): for sus2, sus4,
+    // dim and b5 chords the middle tone is not a 3rd, but the intended run is
+    // still "outer tones, then octave-up root, then octave-up middle tone".
+    // (rootPitchClass is therefore unused on this path.)
+    static_cast<void> (rootPitchClass);
 
-    // Find remaining two notes and identify 3rd vs 5th by interval from root
-    std::vector<int> remaining;
-    for (int n : notes)
-    {
-        if (n != rootNote)
-            remaining.push_back (n);
-    }
-
-    // Smaller interval from root = 3rd, larger = 5th
-    // (minor 3rd=3, major 3rd=4 are always < perfect 5th=7)
-    int thirdNote = -1, fifthNote = -1;
-    if (remaining.size() == 2)
-    {
-        // Normalise to 0..11 so a note below the root (e.g. an on-chord bass
-        // ahead of the root) still yields a correct interval for 3rd/5th sorting.
-        const int interval0 = ((remaining[0] - rootNote) % 12 + 12) % 12;
-        const int interval1 = ((remaining[1] - rootNote) % 12 + 12) % 12;
-        if (interval0 < interval1)
-        {
-            thirdNote = remaining[0];
-            fifthNote = remaining[1];
-        }
-        else
-        {
-            thirdNote = remaining[1];
-            fifthNote = remaining[0];
-        }
-    }
-
-    if (thirdNote < 0 || fifthNote < 0)
-        return notes; // fallback if we couldn't identify roles
-
-    std::vector<int> result;
-    result.reserve (4);
-    result.push_back (rootNote);      // b0 = root
-    result.push_back (fifthNote);     // b1 = 5th
-    result.push_back (rootNote + 12); // b2 = root-octave
-    result.push_back (thirdNote + 12);// b3 = 3rd-octave
-    return result;
+    return { notes[0], notes[2], notes[0] + 12, notes[1] + 12 };
 }
 
 std::vector<int> PlaybackBuilder::ensureMinArpeggioNotes (std::vector<int> notes, int rootPitchClass)
@@ -155,10 +114,11 @@ std::vector<int> buildPatternSequence (const std::vector<int>& base,
         case ArpPattern::UpDown:
             if (useOpenUpDown && k == 4)
             {
-                // New 8-note period: b0 b1 b2 b3 top b3 b2 b1.
-                // The ascending run is b0 b1 b2 b3 top, so top must sit ABOVE
-                // b3 (the highest base note): it is the root one octave above
-                // b2. Since b2 == rootNote + 12, top == rootNote + 24.
+                // 8-note period: b0 b1 b2 b3 top b3 b2 b1.
+                // The ascending run is b0 b1 b2 b3 top, so top must sit above b3.
+                // It is the lowest octave transposition of the root that clears
+                // b3, computed by stepping up in octaves rather than assuming a
+                // fixed +24, so the invariant holds for any base spacing.
                 int rootNote = -1;
                 for (int n : base)
                 {
@@ -171,7 +131,9 @@ std::vector<int> buildPatternSequence (const std::vector<int>& base,
                 if (rootNote < 0)
                     rootNote = base[0];
 
-                const int top = rootNote + 24;
+                int top = rootNote;
+                while (top <= base[3])
+                    top += 12;
                 seq.reserve (8);
                 seq.push_back (base[0]);
                 seq.push_back (base[1]);
@@ -260,11 +222,12 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
         //    setting applies directly (Open = drop-2 + bass).
         //  - DYAD/TRIAD: always take the plain stacked (Close) tones as material;
         //    the Close/Open choice only changes how they are re-stacked below.
-        //    For Open, the run starts one octave lower so its root matches the
-        //    root of the same chord's Open-voiced Major7 (octaveBase 48 = C3),
-        //    rather than the default C4.
+        //    For Open, the run starts one octave lower so that C5, C and CM7 (and
+        //    likewise D5, D, DM7 for any root) all begin on the same pitch. A 4-note
+        //    Open voicing adds its bass at rootMidi - 12, so its lowest note is an
+        //    octave below the default base; starting small chords at 48 matches that.
         static constexpr int kDefaultOctaveBase = 60; // C4
-        static constexpr int kOpenArpOctaveBase = 48; // C3 (Major7 Open root)
+        static constexpr int kOpenArpOctaveBase = 48; // C3 (= lowest note of an Open 4-note voicing)
         const int octaveBase = (isSmallChord && openArp) ? kOpenArpOctaveBase
                                                          : kDefaultOctaveBase;
         auto chordNotes = Voicing::midiNotes (*fc.chord,

@@ -115,11 +115,12 @@ inline juce::String tr (const juce::String& key)
         { "Version Info",        "\xE3\x83\x90\xE3\x83\xBC\xE3\x82\xB8\xE3\x83\xA7\xE3\x83\xB3\xE6\x83\x85\xE5\xA0\xB1" },                                  // バージョン情報
         { "Version",             "\xE3\x83\x90\xE3\x83\xBC\xE3\x82\xB8\xE3\x83\xA7\xE3\x83\xB3" },                                                          // バージョン
 
-        // TransportBar VST3 unload (package C). Kept in English to pair with "Load VST3" (package E6).
-        { "Unload VST3",         "Unload VST3" },
-
-        // Custom About dialog OK button (package F1).
-        { "OK",                  "OK" },
+        // Deliberately absent from this table (displayed in English, so they need no entry):
+        //  - "Load VST3" / "Unload VST3": a matched pair of opposite actions. The Japanese
+        //    rendering ("VST3を読み込む") is clumsy and longer without being clearer.
+        //  - "OK": universally understood as-is in Japanese UI.
+        // These are written as plain literals at their call sites; an identity mapping here
+        // would only be dead weight.
 
         // JUCE internal mac Application-menu strings (Services/Hide/Quit etc.), registered via
         // juce::LocalisedStrings::setCurrentMappings so juce_MainMenu_mac.mm's TRANS() calls

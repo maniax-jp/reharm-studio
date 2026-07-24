@@ -43,7 +43,7 @@ public:
         versionLabel.setColour (juce::Label::textColourId, theme::textDim);
         addAndMakeVisible (versionLabel);
 
-        okButton.setButtonText (reharm::loc::tr ("OK"));
+        // Button text comes from the member initialiser ("OK" — shown in English).
         okButton.onClick = [this]
         {
             if (auto* dw = findParentComponentOfClass<juce::DialogWindow>())
@@ -266,16 +266,23 @@ MainComponent::MainComponent()
         // Show All / Quit). juce_MainMenu_mac.mm calls TRANS() with these exact
         // single-word keys, so registering mappings before setMacMainMenu() is enough;
         // existing loc::tr()-based UI is unaffected since it never goes through TRANS().
-        juce::StringPairArray pairs;
-        pairs.set ("Services",    reharm::loc::tr ("Services"));
-        pairs.set ("Hide",        reharm::loc::tr ("Hide"));
-        pairs.set ("Hide Others", reharm::loc::tr ("Hide Others"));
-        pairs.set ("Show All",    reharm::loc::tr ("Show All"));
-        pairs.set ("Quit",        reharm::loc::tr ("Quit"));
+        //
+        // LocalisedStrings only exposes translation-file text (or a File) as a public
+        // constructor, so building that text is the intended route. Keys and values are
+        // quoted per line; quoteEntry escapes any embedded quote so a translation
+        // containing one cannot break the parse.
+        static constexpr const char* menuKeys[] = { "Services", "Hide", "Hide Others",
+                                                    "Show All", "Quit" };
+
+        auto quoteEntry = [] (const juce::String& key, const juce::String& value)
+        {
+            return "\"" + key.replace ("\"", "\\\"") + "\" = \""
+                        + value.replace ("\"", "\\\"") + "\"\n";
+        };
 
         juce::String translationText;
-        for (auto& key : pairs.getAllKeys())
-            translationText << "\"" << key << "\" = \"" << pairs[key] << "\"\n";
+        for (auto* key : menuKeys)
+            translationText << quoteEntry (key, reharm::loc::tr (key));
 
         juce::LocalisedStrings::setCurrentMappings (new juce::LocalisedStrings (translationText, false));
     }

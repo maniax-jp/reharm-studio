@@ -78,7 +78,7 @@ public:
             model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C major
 
             PlaybackSettings settings;
-            settings.voicing = Voicing::Style::Open; // Open uses the role-order base
+            settings.voicing = Voicing::Style::Open; // Open uses the re-stacked base
             settings.arpPattern = ArpPattern::Up;
             settings.arpRate = ArpRate::Eighth;
 
@@ -355,7 +355,7 @@ public:
             model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
 
             PlaybackSettings settings;
-            settings.voicing = Voicing::Style::Open; // role order + 8-note period
+            settings.voicing = Voicing::Style::Open; // re-stacked base + 8-note period
             settings.arpPattern = ArpPattern::UpDown;
             settings.arpRate = ArpRate::Eighth;
 
@@ -374,7 +374,7 @@ public:
             }
         }
 
-        beginTest ("build(): DYAD/TRIAD arpeggio - Close ascending vs Open role order");
+        beginTest ("build(): DYAD/TRIAD arpeggio - Close ascending vs Open re-stacked");
         {
             // Helper: flatten the first `n` single-note engine slots to a vector.
             auto firstN = [] (const std::shared_ptr<ChordData>& d, int n)
@@ -406,7 +406,7 @@ public:
                     == std::vector<int> ({ 48, 55, 60, 67, 72, 67, 60, 55 }));
 
             // --- TRIAD (Cmaj) ---
-            // Close = ascending octave-fill C E G C'. Open = role order C G C' E' (octave lower).
+            // Close = ascending octave-fill C E G C'. Open = re-stacked C G C' E' (octave lower).
             expect (firstN (run (ChordQuality::Major, ArpPattern::Up, Voicing::Style::Close), 4)
                     == std::vector<int> ({ 60, 64, 67, 72 }));
             expect (firstN (run (ChordQuality::Major, ArpPattern::Up, Voicing::Style::Open),  4)
@@ -475,7 +475,7 @@ public:
             }
         }
 
-        beginTest ("build(): TRIAD arp down (Open) -> reverse of role-order base [E', C', G, C]");
+        beginTest ("build(): TRIAD arp down (Open) -> reverse of re-stacked base [E', C', G, C]");
         {
             ProgressionModel model;
             model.setNumBars (1);
@@ -483,7 +483,7 @@ public:
             model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
 
             PlaybackSettings settings;
-            settings.voicing = Voicing::Style::Open; // role-order base is the Open behaviour
+            settings.voicing = Voicing::Style::Open; // the re-stacked base is the Open behaviour
             settings.arpPattern = ArpPattern::Down;
             settings.arpRate = ArpRate::Quarter;
 

@@ -18,12 +18,14 @@ public:
     /** Beats per arpeggio step for the given rate: 1.0 / 0.5 / 0.25. */
     static double beatsPerStep (ArpRate r);
 
-    /** OPEN-voicing arpeggio base. Re-stacks small chords into a fixed role
-        order so the ascending run is root/5th/root'/3rd':
-        For 2-note chords (DYAD): {n0, n1, n0+12, n1+12}.
-        For 3-note chords (TRIAD): [root, 5th, root+12, 3rd+12] using role
-        identification (smaller interval from root = 3rd, larger = 5th).
-        For 4+ or 1-or-fewer notes: returns notes unchanged. */
+    /** OPEN-voicing arpeggio base. Re-stacks small chords by position (not by
+        harmonic role), so the run leads with the outer tones before the
+        octave-up pair. notes must be ascending (a Close voicing).
+        2 notes (DYAD):  {n0, n1, n0+12, n1+12}.
+        3 notes (TRIAD): {n0, n2, n0+12, n1+12}.
+        4+ or 1-or-fewer notes: returned unchanged.
+        rootPitchClass is unused for 3-note chords - the ordering is purely
+        positional, which keeps sus2/sus4/dim/b5 chords working the same way. */
     static std::vector<int> arpeggioBaseNotes (std::vector<int> notes, int rootPitchClass);
 
     /** CLOSE-voicing arpeggio base (the pre-v19.2 behaviour). Extends the note
