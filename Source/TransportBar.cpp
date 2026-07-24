@@ -276,26 +276,27 @@ juce::String TransportBar::rateLabel (reharm::ArpRate r)
 
 void TransportBar::updatePlayModeButtonLabel()
 {
+    // The button label stays in English (short forms), even though the popup menu
+    // that sets it is localised: a compact "Arp Up-Down Open 1/8" reads better in
+    // the transport bar than the equivalent Japanese, which is long and clumsy.
+    const juce::String voicingName = voicingClose ? "Close" : "Open";
+
     if (pattern == reharm::ArpPattern::Off)
     {
-        playModeButton.setButtonText (voicingClose
-                                          ? reharm::loc::tr ("Block Chord (Close)")
-                                          : reharm::loc::tr ("Block Chord (Open)"));
+        playModeButton.setButtonText ("Block " + voicingName);
         return;
     }
 
     juce::String styleName;
     switch (pattern)
     {
-        case reharm::ArpPattern::Up:     styleName = reharm::loc::tr ("Arp Up"); break;
-        case reharm::ArpPattern::Down:   styleName = reharm::loc::tr ("Arp Down"); break;
-        case reharm::ArpPattern::UpDown: styleName = reharm::loc::tr ("Arp Up-Down"); break;
+        case reharm::ArpPattern::Up:     styleName = "Arp Up"; break;
+        case reharm::ArpPattern::Down:   styleName = "Arp Down"; break;
+        case reharm::ArpPattern::UpDown: styleName = "Arp Up-Down"; break;
         case reharm::ArpPattern::Off:
-        default:                         styleName = reharm::loc::tr ("Block Chord"); break;
+        default:                         styleName = "Block"; break;
     }
 
-    const juce::String voicingName = voicingClose ? reharm::loc::tr ("Close")
-                                                  : reharm::loc::tr ("Open");
     playModeButton.setButtonText (styleName + " " + voicingName + " " + rateLabel (rate));
 }
 

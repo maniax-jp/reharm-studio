@@ -105,7 +105,7 @@ HeaderBar::HeaderBar()
     setUserPresets ({});
 
     saveButton.showArrow = false;
-    saveButton.setButtonText (reharm::loc::tr ("Save"));
+    saveButton.setButtonText ("Save"); // English label: shorter and cleaner than 保存.
     saveButton.onClick = [this]
     {
         if (onSaveRequested)
