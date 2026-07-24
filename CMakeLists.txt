@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(ReharmStudio VERSION 19.3.1)
+project(ReharmStudio VERSION 19.4.0)
 
 # ============================================================================
 # Build-location policy: `build/` is the ONLY canonical build directory.
