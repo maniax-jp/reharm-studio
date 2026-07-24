@@ -294,27 +294,35 @@ void TransportBar::updatePlayModeButtonLabel()
         default:                         styleName = reharm::loc::tr ("Block Chord"); break;
     }
 
-    playModeButton.setButtonText (styleName + " " + rateLabel (rate));
+    const juce::String voicingName = voicingClose ? reharm::loc::tr ("Close")
+                                                  : reharm::loc::tr ("Open");
+    playModeButton.setButtonText (styleName + " " + voicingName + " " + rateLabel (rate));
 }
 
 namespace
 {
-/** Encodes play-mode popup item IDs. */
-enum PlayModeIds
-{
-    kCloseVoicing = 1,
-    kOpenVoicing  = 2,
-    // 10 + rate (0..2)  = Arp Up
-    // 20 + rate         = Arp Down
-    // 30 + rate         = Arp Up-Down
-    kArpUpBase    = 10,
-    kArpDownBase  = 20,
-    kArpUpDownBase = 30
-};
+/** Play-mode popup item IDs.
+    Block: 1 = Close, 2 = Open.
+    Arp:   100 + patternIdx*20 + voicingIdx*10 + rateIdx
+           patternIdx Up=0 Down=1 UpDown=2 ; voicingIdx Close=0 Open=1 ; rateIdx 0..2. */
+constexpr int kBlockClose = 1;
+constexpr int kBlockOpen  = 2;
+constexpr int kArpBase    = 100;
 
-int arpItemId (int base, reharm::ArpRate r)
+int arpItemId (int patternIdx, int voicingIdx, reharm::ArpRate r)
 {
-    return base + (int) r;
+    return kArpBase + patternIdx * 20 + voicingIdx * 10 + (int) r;
+}
+
+int patternIdxOf (reharm::ArpPattern p)
+{
+    switch (p)
+    {
+        case reharm::ArpPattern::Up:     return 0;
+        case reharm::ArpPattern::Down:   return 1;
+        case reharm::ArpPattern::UpDown: return 2;
+        default:                         return -1;
+    }
 }
 } // namespace
 
@@ -325,24 +333,42 @@ void TransportBar::showPlayModeMenu()
 
     {
         juce::PopupMenu block;
-        block.addItem (kCloseVoicing, reharm::loc::tr ("Close Voicing"),
+        block.addItem (kBlockClose, reharm::loc::tr ("Close Voicing"),
                        true, pattern == reharm::ArpPattern::Off && voicingClose);
-        block.addItem (kOpenVoicing, reharm::loc::tr ("Open Voicing"),
+        block.addItem (kBlockOpen, reharm::loc::tr ("Open Voicing"),
                        true, pattern == reharm::ArpPattern::Off && ! voicingClose);
         menu.addSubMenu (reharm::loc::tr ("Block Chord"), block);
     }
 
-    auto addArpSub = [&] (const juce::String& title, int base, reharm::ArpPattern p)
+    const int curPatternIdx = patternIdxOf (pattern);
+
+    // Each arp pattern gets a Close/Open submenu, each with the three rates.
+    auto addArpSub = [&] (const juce::String& title, reharm::ArpPattern p, int patternIdx)
     {
-        juce::PopupMenu sub;
-        for (auto r : { reharm::ArpRate::Quarter, reharm::ArpRate::Eighth, reharm::ArpRate::Sixteenth })
-            sub.addItem (arpItemId (base, r), rateLabel (r), true, pattern == p && rate == r);
-        menu.addSubMenu (title, sub);
+        juce::PopupMenu patternMenu;
+
+        auto addVoicingSub = [&] (const juce::String& vTitle, int voicingIdx, bool wantClose)
+        {
+            juce::PopupMenu rates;
+            for (auto r : { reharm::ArpRate::Quarter, reharm::ArpRate::Eighth, reharm::ArpRate::Sixteenth })
+            {
+                const bool ticked = (curPatternIdx == patternIdx)
+                                    && (voicingClose == wantClose)
+                                    && (rate == r);
+                rates.addItem (arpItemId (patternIdx, voicingIdx, r), rateLabel (r), true, ticked);
+            }
+            patternMenu.addSubMenu (vTitle, rates);
+        };
+
+        addVoicingSub (reharm::loc::tr ("Close Voicing"), 0, true);
+        addVoicingSub (reharm::loc::tr ("Open Voicing"),  1, false);
+
+        menu.addSubMenu (title, patternMenu);
     };
 
-    addArpSub (reharm::loc::tr ("Arp Up"),      kArpUpBase,     reharm::ArpPattern::Up);
-    addArpSub (reharm::loc::tr ("Arp Down"),    kArpDownBase,   reharm::ArpPattern::Down);
-    addArpSub (reharm::loc::tr ("Arp Up-Down"), kArpUpDownBase, reharm::ArpPattern::UpDown);
+    addArpSub (reharm::loc::tr ("Arp Up"),      reharm::ArpPattern::Up,     0);
+    addArpSub (reharm::loc::tr ("Arp Down"),    reharm::ArpPattern::Down,   1);
+    addArpSub (reharm::loc::tr ("Arp Up-Down"), reharm::ArpPattern::UpDown, 2);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&playModeButton),
                         [this] (int resultId) { handlePlayModeMenuResult (resultId); });
@@ -353,10 +379,10 @@ void TransportBar::handlePlayModeMenuResult (int resultId)
     if (resultId == 0)
         return;
 
-    if (resultId == kCloseVoicing || resultId == kOpenVoicing)
+    if (resultId == kBlockClose || resultId == kBlockOpen)
     {
         const bool wasArp = (pattern != reharm::ArpPattern::Off);
-        voicingClose = (resultId == kCloseVoicing);
+        voicingClose = (resultId == kBlockClose);
         pattern = reharm::ArpPattern::Off;
 
         if (onVoicingChanged)
@@ -368,36 +394,30 @@ void TransportBar::handlePlayModeMenuResult (int resultId)
         return;
     }
 
-    reharm::ArpPattern newPattern = reharm::ArpPattern::Off;
-    int base = 0;
-
-    if (resultId >= kArpUpDownBase)
-    {
-        newPattern = reharm::ArpPattern::UpDown;
-        base = kArpUpDownBase;
-    }
-    else if (resultId >= kArpDownBase)
-    {
-        newPattern = reharm::ArpPattern::Down;
-        base = kArpDownBase;
-    }
-    else if (resultId >= kArpUpBase)
-    {
-        newPattern = reharm::ArpPattern::Up;
-        base = kArpUpBase;
-    }
-    else
-    {
-        return;
-    }
-
-    const int rateIndex = resultId - base;
-    if (rateIndex < 0 || rateIndex > 2)
+    if (resultId < kArpBase)
         return;
 
-    pattern = newPattern;
-    rate = static_cast<reharm::ArpRate> (rateIndex);
+    const int enc = resultId - kArpBase;
+    const int patternIdx = enc / 20;
+    const int voicingIdx = (enc % 20) / 10;
+    const int rateIdx    = enc % 10;
 
+    static const reharm::ArpPattern patterns[3] = { reharm::ArpPattern::Up,
+                                                    reharm::ArpPattern::Down,
+                                                    reharm::ArpPattern::UpDown };
+    if (patternIdx < 0 || patternIdx > 2 || rateIdx < 0 || rateIdx > 2)
+        return;
+
+    const bool newVoicingClose = (voicingIdx == 0);
+    const bool voicingChanged = (newVoicingClose != voicingClose);
+
+    voicingClose = newVoicingClose;
+    pattern = patterns[patternIdx];
+    rate = static_cast<reharm::ArpRate> (rateIdx);
+
+    // Voicing affects the arpeggio note content, so notify voicing first.
+    if (voicingChanged && onVoicingChanged)
+        onVoicingChanged (voicingClose);
     if (onPlayStyleChanged)
         onPlayStyleChanged (pattern);
     if (onArpRateChanged)

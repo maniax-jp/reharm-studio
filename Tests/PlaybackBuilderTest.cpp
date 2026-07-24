@@ -70,7 +70,7 @@ public:
             expect (data->notes[2].empty());
         }
 
-        beginTest ("Arp Up: 1 bar div=1, C Major, rate=Eighth -> 8 micro-slots");
+        beginTest ("Arp Up (Open): 1 bar div=1, C Major, rate=Eighth -> 8 micro-slots");
         {
             ProgressionModel model;
             model.setNumBars (1);
@@ -78,18 +78,19 @@ public:
             model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C major
 
             PlaybackSettings settings;
-            settings.voicing = Voicing::Style::Close;
+            settings.voicing = Voicing::Style::Open; // Open uses the role-order base
             settings.arpPattern = ArpPattern::Up;
             settings.arpRate = ArpRate::Eighth;
 
             auto data = PlaybackBuilder::build (model, settings);
 
-            // New base: [C, G, C', E'] = [60, 67, 72, 76] from arpeggioBaseNotes
+            // arpeggioBaseNotes re-stacks in place (octave-independent): C G C' E'.
             const auto base = PlaybackBuilder::arpeggioBaseNotes ({60, 64, 67}, 0);
             expect (base == std::vector<int> ({60, 67, 72, 76}));
 
+            // build() Open runs one octave lower (root C3=48 matches Maj7 Open root).
             expectEquals (data->totalChords, 8);
-            const std::vector<int> expectedSeq = { 60, 67, 72, 76, 60, 67, 72, 76 };
+            const std::vector<int> expectedSeq = { 48, 55, 60, 64, 48, 55, 60, 64 };
             for (int i = 0; i < 8; ++i)
             {
                 expectEquals ((int) data->notes[(size_t) i].size(), 1);
@@ -136,16 +137,15 @@ public:
             modelUpDown.setChord (0, 0, power5);
 
             PlaybackSettings upDownSettings;
+            upDownSettings.voicing = Voicing::Style::Open; // 8-note period is the Open behaviour
             upDownSettings.arpPattern = ArpPattern::UpDown;
             upDownSettings.arpRate = ArpRate::Eighth; // 4 beats / 0.5 = 8 micro-slots
 
             auto upDownData = PlaybackBuilder::build (modelUpDown, upDownSettings);
             expectEquals (upDownData->totalChords, 8);
-            // New 8-note period: C G C' G' C'' G' C' G = {60,67,72,79,84,79,72,67}
-            // top = C'' = root + 24 (one octave above C', the root-octave base note).
-            const std::vector<int> expectedPeriod8 = { power5Base[0], power5Base[1], power5Base[2], power5Base[3],
-                                                       power5Base[0] + 24, power5Base[3], power5Base[2], power5Base[1] };
-            expect (expectedPeriod8 == std::vector<int> ({ 60, 67, 72, 79, 84, 79, 72, 67 }));
+            // New 8-note period at the Open octave base (C3=48): C G C' G' C'' G' C' G
+            // = {48,55,60,67,72,67,60,55}. top = C'' = root + 24.
+            const std::vector<int> expectedPeriod8 = { 48, 55, 60, 67, 72, 67, 60, 55 };
             for (int i = 0; i < 8; ++i)
                 expectEquals (upDownData->notes[(size_t) i][0], expectedPeriod8[(size_t) (i % 8)]);
 
@@ -347,7 +347,7 @@ public:
             expectWithinAbsoluteError (data->beats[0], 4.0, 1.0e-9);
         }
 
-        beginTest ("build(): TRIAD arp updown -> new 8-note period pattern");
+        beginTest ("build(): TRIAD arp updown (Open) -> new 8-note period pattern");
         {
             ProgressionModel model;
             model.setNumBars (1);
@@ -355,17 +355,15 @@ public:
             model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
 
             PlaybackSettings settings;
-            settings.voicing = Voicing::Style::Close;
+            settings.voicing = Voicing::Style::Open; // role order + 8-note period
             settings.arpPattern = ArpPattern::UpDown;
             settings.arpRate = ArpRate::Eighth;
 
             auto data = PlaybackBuilder::build (model, settings);
 
-            // Base: [C, G, C', E'] = [60, 67, 72, 76]
-            const std::vector<int> base = { 60, 67, 72, 76 };
-            // 8-note UpDown: C G C' E' C'' E' C' G
-            // C'' = top = root + 24 = 84 (one octave above C' = 72), NOT 72.
-            const std::vector<int> cycle = { 60, 67, 72, 76, 84, 76, 72, 67 };
+            // Open runs at octave base C3=48: C G C' E' C'' E' C' G.
+            // 8-note UpDown = {48,55,60,64,72,64,60,55}; C'' = top = root + 24 = 72.
+            const std::vector<int> cycle = { 48, 55, 60, 64, 72, 64, 60, 55 };
 
             expectEquals (data->totalChords, 8);
             for (int i = 0; i < 8; ++i)
@@ -376,33 +374,48 @@ public:
             }
         }
 
-        beginTest ("build(): DYAD/TRIAD arpeggio ignores voicing (Open == Close)");
+        beginTest ("build(): DYAD/TRIAD arpeggio - Close ascending vs Open role order");
         {
-            // For 2/3-note chords the arpeggio is re-stacked into a fixed role
-            // order, so the Close/Open setting must NOT change the notes. Regression
-            // test for the bug where Open (drop-2 + bass) corrupted small-chord arps.
-            for (auto quality : { ChordQuality::Power5, ChordQuality::Major,
-                                  ChordQuality::Minor, ChordQuality::Diminished,
-                                  ChordQuality::Sus4 })
+            // Helper: flatten the first `n` single-note engine slots to a vector.
+            auto firstN = [] (const std::shared_ptr<ChordData>& d, int n)
             {
-                for (auto pattern : { ArpPattern::Up, ArpPattern::Down, ArpPattern::UpDown })
-                {
-                    ProgressionModel model;
-                    model.setNumBars (1);
-                    model.setSubdivision (0, BarSubdivision::One);
-                    model.setChord (0, 0, Chord { 0, quality, -1 });
+                std::vector<int> v;
+                for (int i = 0; i < n && i < d->totalChords; ++i)
+                    v.push_back (d->notes[(size_t) i][0]);
+                return v;
+            };
+            auto run = [&] (ChordQuality q, ArpPattern pat, Voicing::Style v)
+            {
+                ProgressionModel m; m.setNumBars (1); m.setSubdivision (0, BarSubdivision::One);
+                m.setChord (0, 0, Chord { 0, q, -1 });
+                PlaybackSettings s { v, pat, ArpRate::Eighth };
+                return PlaybackBuilder::build (m, s);
+            };
 
-                    PlaybackSettings closeS { Voicing::Style::Close, pattern, ArpRate::Eighth };
-                    PlaybackSettings openS  { Voicing::Style::Open,  pattern, ArpRate::Eighth };
+            // Close runs at octave base C4=60; Open runs one octave lower (C3=48).
+            // --- DYAD (C5) ---
+            // Up/Down re-stack to C G C' G' in both, but Open is an octave lower.
+            expect (firstN (run (ChordQuality::Power5, ArpPattern::Up,   Voicing::Style::Close), 4)
+                    == std::vector<int> ({ 60, 67, 72, 79 }));
+            expect (firstN (run (ChordQuality::Power5, ArpPattern::Up,   Voicing::Style::Open),  4)
+                    == std::vector<int> ({ 48, 55, 60, 67 }));
+            // UpDown differs: Close = legacy period-6 (n0..n3,n2,n1), Open = 8-note period.
+            expect (firstN (run (ChordQuality::Power5, ArpPattern::UpDown, Voicing::Style::Close), 6)
+                    == std::vector<int> ({ 60, 67, 72, 79, 72, 67 }));
+            expect (firstN (run (ChordQuality::Power5, ArpPattern::UpDown, Voicing::Style::Open),  8)
+                    == std::vector<int> ({ 48, 55, 60, 67, 72, 67, 60, 55 }));
 
-                    auto closeData = PlaybackBuilder::build (model, closeS);
-                    auto openData  = PlaybackBuilder::build (model, openS);
-
-                    expectEquals (openData->totalChords, closeData->totalChords);
-                    for (int i = 0; i < closeData->totalChords; ++i)
-                        expect (openData->notes[(size_t) i] == closeData->notes[(size_t) i]);
-                }
-            }
+            // --- TRIAD (Cmaj) ---
+            // Close = ascending octave-fill C E G C'. Open = role order C G C' E' (octave lower).
+            expect (firstN (run (ChordQuality::Major, ArpPattern::Up, Voicing::Style::Close), 4)
+                    == std::vector<int> ({ 60, 64, 67, 72 }));
+            expect (firstN (run (ChordQuality::Major, ArpPattern::Up, Voicing::Style::Open),  4)
+                    == std::vector<int> ({ 48, 55, 60, 64 }));
+            // UpDown: Close legacy period-6 over C E G C'; Open 8-note period (octave lower).
+            expect (firstN (run (ChordQuality::Major, ArpPattern::UpDown, Voicing::Style::Close), 6)
+                    == std::vector<int> ({ 60, 64, 67, 72, 67, 64 }));
+            expect (firstN (run (ChordQuality::Major, ArpPattern::UpDown, Voicing::Style::Open),  8)
+                    == std::vector<int> ({ 48, 55, 60, 64, 72, 64, 60, 55 }));
         }
 
         beginTest ("build(): 4-note arpeggio honours voicing (Open != Close)");
@@ -462,7 +475,7 @@ public:
             }
         }
 
-        beginTest ("build(): TRIAD arp down -> reverse of new base [E', C', G, C]");
+        beginTest ("build(): TRIAD arp down (Open) -> reverse of role-order base [E', C', G, C]");
         {
             ProgressionModel model;
             model.setNumBars (1);
@@ -470,15 +483,15 @@ public:
             model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
 
             PlaybackSettings settings;
-            settings.voicing = Voicing::Style::Close;
+            settings.voicing = Voicing::Style::Open; // role-order base is the Open behaviour
             settings.arpPattern = ArpPattern::Down;
             settings.arpRate = ArpRate::Quarter;
 
             auto data = PlaybackBuilder::build (model, settings);
 
-            // Base: [C, G, C', E'] = [60, 67, 72, 76]
-            // Down: [E', C', G, C] = [76, 72, 67, 60]
-            const std::vector<int> expectedReverse = { 76, 72, 67, 60 };
+            // Open base at C3=48: [C, G, C', E'] = [48, 55, 60, 64]
+            // Down: [E', C', G, C] = [64, 60, 55, 48]
+            const std::vector<int> expectedReverse = { 64, 60, 55, 48 };
 
             expectEquals (data->totalChords, 4);
             for (int i = 0; i < 4; ++i)

@@ -90,16 +90,52 @@ std::vector<int> PlaybackBuilder::arpeggioBaseNotes (std::vector<int> notes, int
     return result;
 }
 
+std::vector<int> PlaybackBuilder::ensureMinArpeggioNotes (std::vector<int> notes, int rootPitchClass)
+{
+    const int k = static_cast<int> (notes.size());
+    if (k <= 1 || k >= 4)
+        return notes;
+
+    if (k == 2)
+    {
+        notes.push_back (notes[0] + 12);
+        notes.push_back (notes[1] + 12);
+        std::sort (notes.begin(), notes.end());
+        return notes;
+    }
+
+    // k == 3: add the root one octave up (skip past any duplicate).
+    int rootNote = -1;
+    for (int n : notes)
+    {
+        if ((n % 12) == rootPitchClass)
+        {
+            rootNote = n;
+            break;
+        }
+    }
+    if (rootNote < 0)
+        rootNote = notes[0];
+
+    int candidate = rootNote + 12;
+    while (std::find (notes.begin(), notes.end(), candidate) != notes.end())
+        candidate += 12;
+
+    notes.push_back (candidate);
+    std::sort (notes.begin(), notes.end());
+    return notes;
+}
+
 namespace
 {
 /** Builds the one-cycle pattern sequence for the given arpeggio pattern.
-    expandedFromSmall: true when original chord had 2 or 3 notes (DYAD/TRIAD).
-    When true, UpDown uses the new 8-note period pattern.
-    When false (4+ note chords), uses the legacy period-6 pattern. */
+    useOpenUpDown: true only for the Open-voicing DYAD/TRIAD case, where UpDown
+    uses the new 8-note period. Otherwise (Close voicing, or 4+ note chords) the
+    legacy period pattern (n0..nk-1 then nk-2..n1) is used. */
 std::vector<int> buildPatternSequence (const std::vector<int>& base,
                                         ArpPattern pattern,
                                         int rootPitchClass,
-                                        bool expandedFromSmall)
+                                        bool useOpenUpDown)
 {
     std::vector<int> seq;
     const int k = (int) base.size();
@@ -117,7 +153,7 @@ std::vector<int> buildPatternSequence (const std::vector<int>& base,
             break;
 
         case ArpPattern::UpDown:
-            if (expandedFromSmall && k == 4)
+            if (useOpenUpDown && k == 4)
             {
                 // New 8-note period: b0 b1 b2 b3 top b3 b2 b1.
                 // The ascending run is b0 b1 b2 b3 top, so top must sit ABOVE
@@ -216,17 +252,25 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
         // Number of chord tones is decided from the chord itself (independent of
         // voicing and of any explicit bass): DYAD=2, TRIAD/sus/aug/dim=3, else 4+.
         const int chordToneCount = static_cast<int> (ChordModel::effectiveIntervals (*fc.chord).size());
-        const bool expandedFromSmall = (chordToneCount <= 3);
+        const bool isSmallChord = (chordToneCount <= 3);
+        const bool openArp = (settings.voicing == Voicing::Style::Open);
 
-        // Voicing (Close/Open) only makes sense for 4+ note chords, whose arpeggio
-        // walks the voiced notes as-is. DYAD/TRIAD are re-stacked into a fixed
-        // role order (root/5th/root'/3rd') by arpeggioBaseNotes, so the Close/Open
-        // setting is irrelevant there and would only corrupt the note roles
-        // (Open adds a low bass + drop-2). Hence: small chords use Close-position
-        // tones; 4+ note chords honour the selected voicing.
+        // Arpeggio note material:
+        //  - 4+ note chords: walk the voiced notes as-is, so the Close/Open
+        //    setting applies directly (Open = drop-2 + bass).
+        //  - DYAD/TRIAD: always take the plain stacked (Close) tones as material;
+        //    the Close/Open choice only changes how they are re-stacked below.
+        //    For Open, the run starts one octave lower so its root matches the
+        //    root of the same chord's Open-voiced Major7 (octaveBase 48 = C3),
+        //    rather than the default C4.
+        static constexpr int kDefaultOctaveBase = 60; // C4
+        static constexpr int kOpenArpOctaveBase = 48; // C3 (Major7 Open root)
+        const int octaveBase = (isSmallChord && openArp) ? kOpenArpOctaveBase
+                                                         : kDefaultOctaveBase;
         auto chordNotes = Voicing::midiNotes (*fc.chord,
-                                              expandedFromSmall ? Voicing::Style::Close
-                                                                : settings.voicing);
+                                              isSmallChord ? Voicing::Style::Close
+                                                           : settings.voicing,
+                                              octaveBase);
 
         if (chordNotes.empty())
         {
@@ -237,12 +281,18 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
             continue;
         }
 
-        // Build arpeggio base notes (expands 2/3-note chords to 4-note base).
-        chordNotes = arpeggioBaseNotes (chordNotes, fc.chord->rootPitchClass);
+        // Small chords (DYAD/TRIAD) get re-stacked to a 4-note base:
+        //  - Open : role-order stacking (root/5th/root'/3rd') + 8-note UpDown.
+        //  - Close: pre-v19.2 ascending octave-fill + legacy UpDown.
+        // 4+ note chords keep the voiced notes and always use the legacy UpDown.
+        const bool useOpenUpDown = isSmallChord && openArp;
+        if (isSmallChord)
+            chordNotes = openArp ? arpeggioBaseNotes (chordNotes, fc.chord->rootPitchClass)
+                                 : ensureMinArpeggioNotes (chordNotes, fc.chord->rootPitchClass);
 
         const auto seq = buildPatternSequence (chordNotes, settings.arpPattern,
                                                 fc.chord->rootPitchClass,
-                                                expandedFromSmall);
+                                                useOpenUpDown);
         const int seqLen = (int) seq.size();
         if (seqLen == 0)
         {
