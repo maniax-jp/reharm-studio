@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "Theme.h"
+#include "PlaybackSettings.h"
 
 /**
  * Circular play/stop toggle painted custom.
@@ -51,27 +52,29 @@ private:
 /**
  * TextButton subclass that reports right-clicks separately from left-clicks,
  * so callers can show a context menu (e.g. "Unload VST3") without disturbing
- * the normal left-click action.
+ * the normal left-click action. Drawn ComboBox-style via ComboButton (no
+ * dropdown arrow: Load VST3 opens a file chooser on click, not a menu).
  */
-class RightClickableButton : public juce::TextButton
+class RightClickableButton : public ComboButton
 {
 public:
-    using juce::TextButton::TextButton;
+    using ComboButton::ComboButton;
     std::function<void()> onRightClick;
     void mouseDown (const juce::MouseEvent& e) override
     {
         if (e.mods.isPopupMenu()) { if (onRightClick) onRightClick(); return; }
-        juce::TextButton::mouseDown (e);
+        ComboButton::mouseDown (e);
     }
     void mouseUp (const juce::MouseEvent& e) override
     {
         if (e.mods.isPopupMenu()) return;
-        juce::TextButton::mouseUp (e);
+        ComboButton::mouseUp (e);
     }
 };
 
 /**
- * Transport: play/stop, BPM, volume, VST3 load + plugin name.
+ * Transport: play/stop, BPM, volume, play-style (voicing/arpeggio) picker,
+ * VST3 load + plugin name.
  */
 class TransportBar : public juce::Component
 {
@@ -83,6 +86,9 @@ public:
     void setBpm (int bpm);
     void setVolume (float volume01); // 0..1
     void setPluginName (const juce::String& name);
+    void setVoicingClose (bool close);
+    void setPlayStyle (reharm::ArpPattern pattern);
+    void setArpRate (reharm::ArpRate rate);
 
     std::function<void()> onPlayStopClicked;
     std::function<void (int bpm)> onBpmChanged;
@@ -91,6 +97,9 @@ public:
     std::function<void()> onOpenPluginEditor;
     std::function<juce::File()> onPrepareMidiDragFile;
     std::function<void()> onUnloadPlugin;
+    std::function<void (bool closeVoicing)> onVoicingChanged;
+    std::function<void (reharm::ArpPattern)> onPlayStyleChanged;
+    std::function<void (reharm::ArpRate)> onArpRateChanged;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -101,10 +110,20 @@ private:
     juce::Label bpmLabel;
     juce::Slider volumeSlider;
     juce::Label volumeLabel;
+    ComboButton playModeButton;
     RightClickableButton loadButton { "Load VST3" };
     juce::TextButton pluginNameButton { "No Plugin" };
     MidiDragBadge midiBadge;
     bool pluginLoaded = false;
+
+    bool voicingClose = true;
+    reharm::ArpPattern pattern = reharm::ArpPattern::Off;
+    reharm::ArpRate rate = reharm::ArpRate::Eighth;
+
+    void showPlayModeMenu();
+    void handlePlayModeMenuResult (int resultId);
+    void updatePlayModeButtonLabel();
+    static juce::String rateLabel (reharm::ArpRate r);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TransportBar)
 };

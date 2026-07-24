@@ -5,15 +5,18 @@ namespace
 {
 
 /** PopupMenu custom row for a user preset.
-    Left-click selects; right-click closes the parent menu with pendingDeleteName set
-    so HeaderBar can show a standalone Delete... menu at the cursor. */
+    Left-click selects; right-click overlays a "Delete..." menu on top of the
+    still-open parent menu (the parent Select-preset list stays visible behind
+    it). Only picking "Delete..." closes the parent, via triggerMenuItem(). */
 class UserPresetMenuItem : public juce::PopupMenu::CustomComponent
 {
 public:
-    UserPresetMenuItem (const juce::String& nameIn, juce::String& pendingDelete)
+    UserPresetMenuItem (const juce::String& nameIn, juce::String& pendingDelete,
+                        juce::LookAndFeel* lookAndFeelIn)
         : juce::PopupMenu::CustomComponent (false),
           presetName (nameIn),
-          pendingDeleteName (pendingDelete)
+          pendingDeleteName (pendingDelete),
+          lnf (lookAndFeelIn)
     {
     }
 
@@ -42,12 +45,26 @@ public:
 
     void mouseUp (const juce::MouseEvent& e) override
     {
-        // Right-click: close parent menu only. Do not open a nested PopupMenu here;
-        // two independent menu stacks race and cancel each other on macOS.
         if (e.mods.isPopupMenu())
         {
-            pendingDeleteName = presetName;
-            triggerMenuItem();
+            // Overlay a small "Delete..." menu on top of the still-open parent
+            // (Select preset) menu, anchored at the cursor. The parent is only
+            // closed (via triggerMenuItem) once the user actually picks Delete.
+            juce::PopupMenu context;
+            if (lnf != nullptr)
+                context.setLookAndFeel (lnf);
+            context.addItem (1, reharm::loc::tr ("Delete..."));
+            context.showMenuAsync (juce::PopupMenu::Options()
+                                       .withTargetScreenArea (juce::Rectangle<int> (
+                                           e.getScreenPosition().x, e.getScreenPosition().y, 1, 1)),
+                                   [this] (int r)
+                                   {
+                                       if (r == 1)
+                                       {
+                                           pendingDeleteName = presetName;
+                                           triggerMenuItem(); // Closes the parent Select-preset menu.
+                                       }
+                                   });
             return;
         }
 
@@ -58,25 +75,8 @@ public:
 private:
     juce::String presetName;
     juce::String& pendingDeleteName;
+    juce::LookAndFeel* lnf;
 };
-
-/** Encodes play-mode popup item IDs. */
-enum PlayModeIds
-{
-    kCloseVoicing = 1,
-    kOpenVoicing  = 2,
-    // 10 + rate (0..2)  = Arp Up
-    // 20 + rate         = Arp Down
-    // 30 + rate         = Arp Up-Down
-    kArpUpBase    = 10,
-    kArpDownBase  = 20,
-    kArpUpDownBase = 30
-};
-
-int arpItemId (int base, reharm::ArpRate r)
-{
-    return base + (int) r;
-}
 
 } // namespace
 
@@ -98,11 +98,13 @@ HeaderBar::HeaderBar()
     scaleBox.onChange = [this] { handleKeyOrScaleChanged(); };
     addAndMakeVisible (scaleBox);
 
+    presetButton.showArrow = true;
     presetButton.setButtonText ("Select preset...");
     presetButton.onClick = [this] { showPresetMenu(); };
     addAndMakeVisible (presetButton);
     setUserPresets ({});
 
+    saveButton.showArrow = false;
     saveButton.setButtonText (reharm::loc::tr ("Save"));
     saveButton.onClick = [this]
     {
@@ -110,34 +112,12 @@ HeaderBar::HeaderBar()
             onSaveRequested();
     };
     addAndMakeVisible (saveButton);
-
-    playModeButton.onClick = [this] { showPlayModeMenu(); };
-    addAndMakeVisible (playModeButton);
-    updatePlayModeButtonLabel();
 }
 
 void HeaderBar::setKey (int tonicPitchClass, bool isMajor)
 {
     keyBox.setSelectedId (juce::jlimit (0, 11, tonicPitchClass) + 1, juce::dontSendNotification);
     scaleBox.setSelectedId (isMajor ? 1 : 2, juce::dontSendNotification);
-}
-
-void HeaderBar::setVoicingClose (bool close)
-{
-    voicingClose = close;
-    updatePlayModeButtonLabel();
-}
-
-void HeaderBar::setPlayStyle (reharm::ArpPattern p)
-{
-    pattern = p;
-    updatePlayModeButtonLabel();
-}
-
-void HeaderBar::setArpRate (reharm::ArpRate r)
-{
-    rate = r;
-    updatePlayModeButtonLabel();
 }
 
 void HeaderBar::setUserPresets (const juce::StringArray& names)
@@ -151,132 +131,12 @@ void HeaderBar::handleKeyOrScaleChanged()
         onKeyChanged (keyBox.getSelectedId() - 1, scaleBox.getSelectedId() == 1);
 }
 
-juce::String HeaderBar::rateLabel (reharm::ArpRate r)
-{
-    switch (r)
-    {
-        case reharm::ArpRate::Quarter:   return "1/4";
-        case reharm::ArpRate::Sixteenth: return "1/16";
-        case reharm::ArpRate::Eighth:
-        default:                         return "1/8";
-    }
-}
-
-void HeaderBar::updatePlayModeButtonLabel()
-{
-    if (pattern == reharm::ArpPattern::Off)
-    {
-        playModeButton.setButtonText (voicingClose
-                                          ? reharm::loc::tr ("Block Chord (Close)")
-                                          : reharm::loc::tr ("Block Chord (Open)"));
-        return;
-    }
-
-    juce::String styleName;
-    switch (pattern)
-    {
-        case reharm::ArpPattern::Up:     styleName = reharm::loc::tr ("Arp Up"); break;
-        case reharm::ArpPattern::Down:   styleName = reharm::loc::tr ("Arp Down"); break;
-        case reharm::ArpPattern::UpDown: styleName = reharm::loc::tr ("Arp Up-Down"); break;
-        case reharm::ArpPattern::Off:
-        default:                         styleName = reharm::loc::tr ("Block Chord"); break;
-    }
-
-    playModeButton.setButtonText (styleName + " " + rateLabel (rate));
-}
-
-void HeaderBar::showPlayModeMenu()
-{
-    juce::PopupMenu menu;
-
-    {
-        juce::PopupMenu block;
-        block.addItem (kCloseVoicing, reharm::loc::tr ("Close Voicing"),
-                       true, pattern == reharm::ArpPattern::Off && voicingClose);
-        block.addItem (kOpenVoicing, reharm::loc::tr ("Open Voicing"),
-                       true, pattern == reharm::ArpPattern::Off && ! voicingClose);
-        menu.addSubMenu (reharm::loc::tr ("Block Chord"), block);
-    }
-
-    auto addArpSub = [&] (const juce::String& title, int base, reharm::ArpPattern p)
-    {
-        juce::PopupMenu sub;
-        for (auto r : { reharm::ArpRate::Quarter, reharm::ArpRate::Eighth, reharm::ArpRate::Sixteenth })
-            sub.addItem (arpItemId (base, r), rateLabel (r), true, pattern == p && rate == r);
-        menu.addSubMenu (title, sub);
-    };
-
-    addArpSub (reharm::loc::tr ("Arp Up"),      kArpUpBase,     reharm::ArpPattern::Up);
-    addArpSub (reharm::loc::tr ("Arp Down"),    kArpDownBase,   reharm::ArpPattern::Down);
-    addArpSub (reharm::loc::tr ("Arp Up-Down"), kArpUpDownBase, reharm::ArpPattern::UpDown);
-
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&playModeButton),
-                        [this] (int resultId) { handlePlayModeMenuResult (resultId); });
-}
-
-void HeaderBar::handlePlayModeMenuResult (int resultId)
-{
-    if (resultId == 0)
-        return;
-
-    if (resultId == kCloseVoicing || resultId == kOpenVoicing)
-    {
-        const bool wasArp = (pattern != reharm::ArpPattern::Off);
-        voicingClose = (resultId == kCloseVoicing);
-        pattern = reharm::ArpPattern::Off;
-
-        if (onVoicingChanged)
-            onVoicingChanged (voicingClose);
-        if (wasArp && onPlayStyleChanged)
-            onPlayStyleChanged (reharm::ArpPattern::Off);
-
-        updatePlayModeButtonLabel();
-        return;
-    }
-
-    reharm::ArpPattern newPattern = reharm::ArpPattern::Off;
-    int base = 0;
-
-    if (resultId >= kArpUpDownBase)
-    {
-        newPattern = reharm::ArpPattern::UpDown;
-        base = kArpUpDownBase;
-    }
-    else if (resultId >= kArpDownBase)
-    {
-        newPattern = reharm::ArpPattern::Down;
-        base = kArpDownBase;
-    }
-    else if (resultId >= kArpUpBase)
-    {
-        newPattern = reharm::ArpPattern::Up;
-        base = kArpUpBase;
-    }
-    else
-    {
-        return;
-    }
-
-    const int rateIndex = resultId - base;
-    if (rateIndex < 0 || rateIndex > 2)
-        return;
-
-    pattern = newPattern;
-    rate = static_cast<reharm::ArpRate> (rateIndex);
-
-    if (onPlayStyleChanged)
-        onPlayStyleChanged (pattern);
-    if (onArpRateChanged)
-        onArpRateChanged (rate);
-
-    updatePlayModeButtonLabel();
-}
-
 void HeaderBar::showPresetMenu()
 {
     pendingDeleteName.clear();
 
     juce::PopupMenu menu;
+    menu.setLookAndFeel (&getLookAndFeel());
 
     const auto& presets = reharm::ProgressionPresets::all();
     for (int i = 0; i < (int) presets.size(); ++i)
@@ -290,7 +150,8 @@ void HeaderBar::showPresetMenu()
         for (int i = 0; i < userPresetNames.size(); ++i)
         {
             menu.addCustomItem (1000 + i,
-                                std::make_unique<UserPresetMenuItem> (userPresetNames[i], pendingDeleteName),
+                                std::make_unique<UserPresetMenuItem> (userPresetNames[i], pendingDeleteName,
+                                                                      &getLookAndFeel()),
                                 nullptr,
                                 userPresetNames[i]);
         }
@@ -302,35 +163,25 @@ void HeaderBar::showPresetMenu()
 
 void HeaderBar::handlePresetMenuResult (int resultId)
 {
-    if (resultId == 0)
+    // A pending delete is honoured regardless of resultId: when the delete is
+    // triggered from the nested "Delete..." context menu, triggerMenuItem()
+    // closes the parent with resultId 0 rather than the custom item's id, so we
+    // must key off pendingDeleteName, not the id.
+    if (pendingDeleteName.isNotEmpty())
     {
+        const juce::String name = pendingDeleteName;
         pendingDeleteName.clear();
+
+        if (onUserPresetDeleteRequested)
+            onUserPresetDeleteRequested (name);
         return;
     }
 
+    if (resultId == 0)
+        return;
+
     if (resultId >= 1000)
     {
-        if (pendingDeleteName.isNotEmpty())
-        {
-            // Parent Select-preset menu is already closed. Show Delete... at cursor
-            // as a standalone menu so it does not race the parent stack.
-            const juce::String name = pendingDeleteName;
-            pendingDeleteName.clear();
-
-            const auto mouse = juce::Desktop::getInstance().getMainMouseSource()
-                                   .getScreenPosition().roundToInt();
-            juce::PopupMenu context;
-            context.addItem (1, reharm::loc::tr ("Delete..."));
-            context.showMenuAsync (juce::PopupMenu::Options()
-                                       .withTargetScreenArea (juce::Rectangle<int> (mouse.x, mouse.y, 1, 1)),
-                                   [this, name] (int r)
-                                   {
-                                       if (r == 1 && onUserPresetDeleteRequested)
-                                           onUserPresetDeleteRequested (name);
-                                   });
-            return;
-        }
-
         const int index = resultId - 1000;
         if (index >= 0 && index < userPresetNames.size())
         {
@@ -396,10 +247,4 @@ void HeaderBar::resized()
 
     const int saveButtonW = 64;
     saveButton.setBounds (area.removeFromLeft (saveButtonW).withSizeKeepingCentre (saveButtonW, comboH));
-    area.removeFromLeft (gap);
-
-    area.removeFromLeft (12);
-
-    const int playModeW = 210;
-    playModeButton.setBounds (area.removeFromLeft (playModeW).withSizeKeepingCentre (playModeW, comboH));
 }

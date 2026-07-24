@@ -44,6 +44,35 @@ void ReharmLookAndFeel::drawButtonBackground (juce::Graphics& g,
                                               bool shouldDrawButtonAsHighlighted,
                                               bool shouldDrawButtonAsDown)
 {
+    if (auto* comboButton = dynamic_cast<ComboButton*> (&button))
+    {
+        // Same visual treatment as drawComboBox: rounded surfaceHi fill,
+        // border/accent outline, optional right-side dropdown arrow.
+        auto bounds = juce::Rectangle<float> (0.0f, 0.0f,
+                                              (float) comboButton->getWidth(),
+                                              (float) comboButton->getHeight()).reduced (0.5f);
+        const float radius = 8.0f;
+
+        g.setColour (theme::surfaceHi);
+        g.fillRoundedRectangle (bounds, radius);
+        g.setColour (comboButton->hasKeyboardFocus (true) ? theme::accent : theme::border);
+        g.drawRoundedRectangle (bounds, radius, 1.0f);
+
+        if (comboButton->showArrow)
+        {
+            const float arrowSize = 6.0f;
+            const float ax = (float) comboButton->getWidth() - 16.0f;
+            const float ay = (float) comboButton->getHeight() * 0.5f;
+            juce::Path arrow;
+            arrow.addTriangle (ax - arrowSize * 0.5f, ay - 2.0f,
+                               ax + arrowSize * 0.5f, ay - 2.0f,
+                               ax, ay + 3.0f);
+            g.setColour (theme::textDim);
+            g.fillPath (arrow);
+        }
+        return;
+    }
+
     auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
     const float radius = 8.0f;
 
@@ -71,6 +100,21 @@ void ReharmLookAndFeel::drawButtonText (juce::Graphics& g,
                                         ? juce::TextButton::textColourOnId
                                         : juce::TextButton::textColourOffId)
                      .withMultipliedAlpha (button.isEnabled() ? 1.0f : 0.5f));
+
+    if (auto* comboButton = dynamic_cast<ComboButton*> (&button))
+    {
+        auto textBounds = comboButton->getLocalBounds();
+        if (comboButton->showArrow)
+            textBounds.removeFromRight (24);
+        textBounds.removeFromLeft (8);
+
+        g.drawFittedText (comboButton->getButtonText(),
+                          textBounds,
+                          comboButton->showArrow ? juce::Justification::centredLeft
+                                                  : juce::Justification::centred,
+                          1);
+        return;
+    }
 
     g.drawFittedText (button.getButtonText(),
                       button.getLocalBounds().reduced (4, 2),

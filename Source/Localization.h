@@ -113,8 +113,20 @@ inline juce::String tr (const juce::String& key)
         { "Version Info",        "\xE3\x83\x90\xE3\x83\xBC\xE3\x82\xB8\xE3\x83\xA7\xE3\x83\xB3\xE6\x83\x85\xE5\xA0\xB1" },                                  // バージョン情報
         { "Version",             "\xE3\x83\x90\xE3\x83\xBC\xE3\x82\xB8\xE3\x83\xA7\xE3\x83\xB3" },                                                          // バージョン
 
-        // TransportBar VST3 unload (package C)
-        { "Unload VST3",         "VST3\xE3\x82\x92\xE3\x82\xA2\xE3\x83\xB3\xE3\x83\xAD\xE3\x83\xBC\xE3\x83\x89" },                                          // VST3をアンロード
+        // TransportBar VST3 unload (package C). Kept in English to pair with "Load VST3" (package E6).
+        { "Unload VST3",         "Unload VST3" },
+
+        // Custom About dialog OK button (package F1).
+        { "OK",                  "OK" },
+
+        // JUCE internal mac Application-menu strings (Services/Hide/Quit etc.), registered via
+        // juce::LocalisedStrings::setCurrentMappings so juce_MainMenu_mac.mm's TRANS() calls
+        // pick them up (package F2). Keys match the single-word TRANS keys used by JUCE itself.
+        { "Services",            "\xE3\x82\xB5\xE3\x83\xBC\xE3\x83\x93\xE3\x82\xB9" },                                                                       // サービス
+        { "Hide",                "\xE9\x9D\x9E\xE8\xA1\xA8\xE7\xA4\xBA" },                                                                                  // 非表示
+        { "Hide Others",         "\xE3\x81\xBB\xE3\x81\x8B\xE3\x82\x92\xE9\x9A\xA0\xE3\x81\x99" },                                                          // ほかを隠す
+        { "Show All",            "\xE3\x81\x99\xE3\x81\xB9\xE3\x81\xA6\xE3\x82\x92\xE8\xA1\xA8\xE7\xA4\xBA" },                                              // すべてを表示
+        { "Quit",                "\xE7\xB5\x82\xE4\xBA\x86" },                                                                                              // 終了
     };
 
     for (const auto& e : table)

@@ -87,6 +87,20 @@ private:
 };
 
 /**
+ * TextButton drawn like a ComboBox (rounded outline, right-side dropdown
+ * arrow, same fill/border colours) so menu-launching buttons visually match
+ * the adjacent ComboBoxes (key/scale pickers).
+ */
+class ComboButton : public juce::TextButton
+{
+public:
+    using juce::TextButton::TextButton;
+
+    /** Whether to draw the right-side dropdown arrow (default true). */
+    bool showArrow = true;
+};
+
+/**
  * Two-segment pill toggle: left | right.
  * Active segment is filled with accent.
  */

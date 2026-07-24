@@ -1,6 +1,7 @@
 #include "MainComponent.h"
 #include "Localization.h"
 #include "MidiExporter.h"
+#include "BinaryData.h"
 #include <fstream>
 
 static void debugLog (const juce::String& msg)
@@ -15,6 +16,74 @@ static void debugLog (const juce::String& msg)
     juce::Logger::writeToLog (msg);
 #endif
 }
+
+namespace
+{
+
+/** Content of the custom About dialog: app icon, name, and version. */
+class AboutContent : public juce::Component
+{
+public:
+    AboutContent()
+    {
+        appIcon = juce::ImageCache::getFromMemory (BinaryData::AppIcon_1024_png,
+                                                    BinaryData::AppIcon_1024_pngSize);
+
+        nameLabel.setText ("Reharm Studio", juce::dontSendNotification);
+        nameLabel.setJustificationType (juce::Justification::centred);
+        nameLabel.setFont (theme::font (18.0f, true));
+        nameLabel.setColour (juce::Label::textColourId, theme::text);
+        addAndMakeVisible (nameLabel);
+
+        const juce::String versionText = reharm::loc::tr ("Version") + " "
+                                            + juce::String (ProjectInfo::versionString);
+        versionLabel.setText (versionText, juce::dontSendNotification);
+        versionLabel.setJustificationType (juce::Justification::centred);
+        versionLabel.setFont (theme::font (13.0f));
+        versionLabel.setColour (juce::Label::textColourId, theme::textDim);
+        addAndMakeVisible (versionLabel);
+
+        okButton.setButtonText (reharm::loc::tr ("OK"));
+        okButton.onClick = [this]
+        {
+            if (auto* dw = findParentComponentOfClass<juce::DialogWindow>())
+                dw->exitModalState (0);
+        };
+        addAndMakeVisible (okButton);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (theme::surface);
+
+        if (appIcon.isValid())
+        {
+            const int iconSize = 128;
+            auto iconArea = juce::Rectangle<int> (0, 20, getWidth(), iconSize);
+            g.drawImage (appIcon, iconArea.withSizeKeepingCentre (iconSize, iconSize).toFloat(),
+                        juce::RectanglePlacement::centred);
+        }
+    }
+
+    void resized() override
+    {
+        auto area = getLocalBounds();
+        area.removeFromTop (156); // icon area
+        nameLabel.setBounds (area.removeFromTop (26));
+        versionLabel.setBounds (area.removeFromTop (20));
+        area.removeFromTop (12);
+        const int buttonW = 80;
+        okButton.setBounds (area.removeFromTop (28).withSizeKeepingCentre (buttonW, 28));
+    }
+
+private:
+    juce::Image appIcon;
+    juce::Label nameLabel;
+    juce::Label versionLabel;
+    juce::TextButton okButton { "OK" };
+};
+
+} // namespace
 
 //==============================================================================
 MainComponent::MainComponent()
@@ -39,7 +108,7 @@ MainComponent::MainComponent()
     chordEditor.setDisplayState (&display);
 
     headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
-    headerBar.setVoicingClose (display.voicingStyle == reharm::Voicing::Style::Close);
+    transportBar.setVoicingClose (display.voicingStyle == reharm::Voicing::Style::Close);
 
 
     headerBar.onKeyChanged = [this] (int tonic, bool isMajor)
@@ -52,17 +121,6 @@ MainComponent::MainComponent()
         reharm::ProgressionPresets::applyToModel (preset, model);
         display.clearSelection();
         updateEditorVisibility();
-    };
-
-    headerBar.onVoicingChanged = [this] (bool close)
-
-    {
-        display.voicingStyle = close ? reharm::Voicing::Style::Close
-                                     : reharm::Voicing::Style::Open;
-        sessionData.voicingClose = close;
-        if (isPlaying)
-            pushChordDataToEngine();
-        markSessionDirty();
     };
 
     headerBar.onSaveRequested = [this] { promptSaveUserPreset(); };
@@ -85,23 +143,6 @@ MainComponent::MainComponent()
                     headerBar.setUserPresets (stateStore.listUserPresetNames());
                 }
             }));
-    };
-
-    headerBar.onPlayStyleChanged = [this] (reharm::ArpPattern p)
-    {
-        display.arpPattern = p;
-        sessionData.arpPattern = p;          // package A autosave picks this up
-        if (isPlaying)
-            pushChordDataToEngine();
-        markSessionDirty();
-    };
-    headerBar.onArpRateChanged = [this] (reharm::ArpRate r)
-    {
-        display.arpRate = r;
-        sessionData.arpRate = r;
-        if (isPlaying)
-            pushChordDataToEngine();
-        markSessionDirty();
     };
 
     sequencerView.onCellSelected = [this] (int bar, int slot)
@@ -129,6 +170,31 @@ MainComponent::MainComponent()
     transportBar.onLoadPlugin = [this] { loadPlugin(); };
     transportBar.onOpenPluginEditor = [this] { openPluginEditor(); };
     transportBar.onUnloadPlugin = [this] { unloadPlugin(); };
+    transportBar.onVoicingChanged = [this] (bool close)
+    {
+        display.voicingStyle = close ? reharm::Voicing::Style::Close
+                                     : reharm::Voicing::Style::Open;
+        sessionData.voicingClose = close;
+        if (isPlaying)
+            pushChordDataToEngine();
+        markSessionDirty();
+    };
+    transportBar.onPlayStyleChanged = [this] (reharm::ArpPattern p)
+    {
+        display.arpPattern = p;
+        sessionData.arpPattern = p;          // package A autosave picks this up
+        if (isPlaying)
+            pushChordDataToEngine();
+        markSessionDirty();
+    };
+    transportBar.onArpRateChanged = [this] (reharm::ArpRate r)
+    {
+        display.arpRate = r;
+        sessionData.arpRate = r;
+        if (isPlaying)
+            pushChordDataToEngine();
+        markSessionDirty();
+    };
     transportBar.onPrepareMidiDragFile = [this]() -> juce::File
     {
         reharm::PlaybackSettings settings { display.voicingStyle, display.arpPattern, display.arpRate };
@@ -153,11 +219,11 @@ MainComponent::MainComponent()
         headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
         display.voicingStyle = sessionData.voicingClose ? reharm::Voicing::Style::Close
                                                         : reharm::Voicing::Style::Open;
-        headerBar.setVoicingClose (sessionData.voicingClose);
+        transportBar.setVoicingClose (sessionData.voicingClose);
         display.arpPattern = sessionData.arpPattern;
         display.arpRate = sessionData.arpRate;
-        headerBar.setPlayStyle (sessionData.arpPattern);
-        headerBar.setArpRate (sessionData.arpRate);
+        transportBar.setPlayStyle (sessionData.arpPattern);
+        transportBar.setArpRate (sessionData.arpRate);
         transportBar.setBpm (sessionData.bpm);
         transportBar.setVolume (sessionData.volume);
         audioEngine->setBpm (sessionData.bpm);
@@ -195,6 +261,25 @@ MainComponent::MainComponent()
     setApplicationCommandManagerToWatch (&commandManager);
 
    #if JUCE_MAC
+    {
+        // Localise the JUCE-generated Application menu (Services / Hide / Hide Others /
+        // Show All / Quit). juce_MainMenu_mac.mm calls TRANS() with these exact
+        // single-word keys, so registering mappings before setMacMainMenu() is enough;
+        // existing loc::tr()-based UI is unaffected since it never goes through TRANS().
+        juce::StringPairArray pairs;
+        pairs.set ("Services",    reharm::loc::tr ("Services"));
+        pairs.set ("Hide",        reharm::loc::tr ("Hide"));
+        pairs.set ("Hide Others", reharm::loc::tr ("Hide Others"));
+        pairs.set ("Show All",    reharm::loc::tr ("Show All"));
+        pairs.set ("Quit",        reharm::loc::tr ("Quit"));
+
+        juce::String translationText;
+        for (auto& key : pairs.getAllKeys())
+            translationText << "\"" << key << "\" = \"" << pairs[key] << "\"\n";
+
+        juce::LocalisedStrings::setCurrentMappings (new juce::LocalisedStrings (translationText, false));
+    }
+
     extraAppleMenu.addItem (reharm::loc::tr ("About Reharm Studio"), [this] { showAboutDialog(); });
     juce::MenuBarModel::setMacMainMenu (this, &extraAppleMenu);
    #endif
@@ -529,9 +614,9 @@ void MainComponent::loadUserPreset (const juce::String& name)
         display.arpPattern = loaded.arpPattern;
         display.arpRate = loaded.arpRate;
         headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
-        headerBar.setVoicingClose (loaded.voicingClose);
-        headerBar.setPlayStyle (loaded.arpPattern);
-        headerBar.setArpRate (loaded.arpRate);
+        transportBar.setVoicingClose (loaded.voicingClose);
+        transportBar.setPlayStyle (loaded.arpPattern);
+        transportBar.setArpRate (loaded.arpRate);
         transportBar.setBpm (loaded.bpm);
         audioEngine->setBpm (loaded.bpm);
         lastUserPresetName = name;
@@ -874,9 +959,18 @@ bool MainComponent::perform (const InvocationInfo& info)
 
 void MainComponent::showAboutDialog()
 {
-    const juce::String message = reharm::loc::tr ("Version") + " " + juce::String (ProjectInfo::versionString);
-    juce::NativeMessageBox::showMessageBoxAsync (
-        juce::MessageBoxIconType::InfoIcon,
-        "Reharm Studio",
-        message);
+    auto* content = new AboutContent();
+    content->setSize (320, 240);
+    if (auto* lnf = &getLookAndFeel())
+        content->setLookAndFeel (lnf);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.dialogTitle = "Reharm Studio";
+    options.dialogBackgroundColour = theme::surface;
+    options.content.setOwned (content);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+
+    options.launchAsync();
 }

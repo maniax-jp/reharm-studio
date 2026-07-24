@@ -67,12 +67,24 @@ void MidiDragBadge::paint (juce::Graphics& g)
     g.setColour (theme::border);
     g.drawRoundedRectangle (bounds.reduced (0.5f), 6.0f, 1.0f);
 
-    // Small eighth-note glyph on the left: stem + flag + notehead.
+    // Icon (eighth-note glyph) + "MIDI" text are treated as one block and
+    // centred together, so the left/right margins around the whole badge
+    // content are equal.
     const float glyphH = bounds.getHeight() * 0.55f;
-    const float stemX = bounds.getX() + 10.0f;
+    const float noteD = glyphH * 0.34f;
+    const float iconW = noteD + glyphH * 0.3f; // notehead footprint + flag width
+    const float gapW = 6.0f;
+
+    const auto textFont = theme::font (12.0f, true);
+    const juce::String text ("MIDI");
+    const float textW = juce::GlyphArrangement::getStringWidth (textFont, text);
+
+    const float contentW = iconW + gapW + textW;
+    const float startX = bounds.getX() + (bounds.getWidth() - contentW) * 0.5f;
+
+    const float stemX = startX + noteD;
     const float stemTop = bounds.getCentreY() - glyphH * 0.5f;
     const float stemBottom = bounds.getCentreY() + glyphH * 0.5f;
-    const float noteD = glyphH * 0.34f;
 
     g.setColour (theme::accent);
     g.fillRect (juce::Rectangle<float> (stemX - 1.0f, stemTop, 2.0f, glyphH));
@@ -85,9 +97,9 @@ void MidiDragBadge::paint (juce::Graphics& g)
     g.fillPath (flag);
 
     g.setColour (theme::text);
-    g.setFont (theme::font (12.0f, true));
-    auto textArea = bounds.withTrimmedLeft (glyphH * 0.5f + 14.0f);
-    g.drawText ("MIDI", textArea, juce::Justification::centredLeft);
+    g.setFont (textFont);
+    auto textArea = juce::Rectangle<float> (startX + iconW + gapW, bounds.getY(), textW, bounds.getHeight());
+    g.drawText (text, textArea, juce::Justification::centredLeft);
 }
 
 void MidiDragBadge::mouseDown (const juce::MouseEvent&)
@@ -162,6 +174,12 @@ TransportBar::TransportBar()
     volumeLabel.setFont (theme::font (13.0f));
     addAndMakeVisible (volumeLabel);
 
+    playModeButton.showArrow = true;
+    playModeButton.onClick = [this] { showPlayModeMenu(); };
+    addAndMakeVisible (playModeButton);
+    updatePlayModeButtonLabel();
+
+    loadButton.showArrow = false;
     loadButton.onClick = [this]
     {
         if (onLoadPlugin)
@@ -170,7 +188,8 @@ TransportBar::TransportBar()
     loadButton.onRightClick = [this]
     {
         juce::PopupMenu menu;
-        menu.addItem (reharm::loc::tr ("Unload VST3"), pluginLoaded, false,
+        menu.setLookAndFeel (&getLookAndFeel());
+        menu.addItem ("Unload VST3", pluginLoaded, false,
                       [this]
                       {
                           if (onUnloadPlugin)
@@ -226,6 +245,167 @@ void TransportBar::setPluginName (const juce::String& name)
     }
 }
 
+void TransportBar::setVoicingClose (bool close)
+{
+    voicingClose = close;
+    updatePlayModeButtonLabel();
+}
+
+void TransportBar::setPlayStyle (reharm::ArpPattern p)
+{
+    pattern = p;
+    updatePlayModeButtonLabel();
+}
+
+void TransportBar::setArpRate (reharm::ArpRate r)
+{
+    rate = r;
+    updatePlayModeButtonLabel();
+}
+
+juce::String TransportBar::rateLabel (reharm::ArpRate r)
+{
+    switch (r)
+    {
+        case reharm::ArpRate::Quarter:   return "1/4";
+        case reharm::ArpRate::Sixteenth: return "1/16";
+        case reharm::ArpRate::Eighth:
+        default:                         return "1/8";
+    }
+}
+
+void TransportBar::updatePlayModeButtonLabel()
+{
+    if (pattern == reharm::ArpPattern::Off)
+    {
+        playModeButton.setButtonText (voicingClose
+                                          ? reharm::loc::tr ("Block Chord (Close)")
+                                          : reharm::loc::tr ("Block Chord (Open)"));
+        return;
+    }
+
+    juce::String styleName;
+    switch (pattern)
+    {
+        case reharm::ArpPattern::Up:     styleName = reharm::loc::tr ("Arp Up"); break;
+        case reharm::ArpPattern::Down:   styleName = reharm::loc::tr ("Arp Down"); break;
+        case reharm::ArpPattern::UpDown: styleName = reharm::loc::tr ("Arp Up-Down"); break;
+        case reharm::ArpPattern::Off:
+        default:                         styleName = reharm::loc::tr ("Block Chord"); break;
+    }
+
+    playModeButton.setButtonText (styleName + " " + rateLabel (rate));
+}
+
+namespace
+{
+/** Encodes play-mode popup item IDs. */
+enum PlayModeIds
+{
+    kCloseVoicing = 1,
+    kOpenVoicing  = 2,
+    // 10 + rate (0..2)  = Arp Up
+    // 20 + rate         = Arp Down
+    // 30 + rate         = Arp Up-Down
+    kArpUpBase    = 10,
+    kArpDownBase  = 20,
+    kArpUpDownBase = 30
+};
+
+int arpItemId (int base, reharm::ArpRate r)
+{
+    return base + (int) r;
+}
+} // namespace
+
+void TransportBar::showPlayModeMenu()
+{
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (&getLookAndFeel());
+
+    {
+        juce::PopupMenu block;
+        block.addItem (kCloseVoicing, reharm::loc::tr ("Close Voicing"),
+                       true, pattern == reharm::ArpPattern::Off && voicingClose);
+        block.addItem (kOpenVoicing, reharm::loc::tr ("Open Voicing"),
+                       true, pattern == reharm::ArpPattern::Off && ! voicingClose);
+        menu.addSubMenu (reharm::loc::tr ("Block Chord"), block);
+    }
+
+    auto addArpSub = [&] (const juce::String& title, int base, reharm::ArpPattern p)
+    {
+        juce::PopupMenu sub;
+        for (auto r : { reharm::ArpRate::Quarter, reharm::ArpRate::Eighth, reharm::ArpRate::Sixteenth })
+            sub.addItem (arpItemId (base, r), rateLabel (r), true, pattern == p && rate == r);
+        menu.addSubMenu (title, sub);
+    };
+
+    addArpSub (reharm::loc::tr ("Arp Up"),      kArpUpBase,     reharm::ArpPattern::Up);
+    addArpSub (reharm::loc::tr ("Arp Down"),    kArpDownBase,   reharm::ArpPattern::Down);
+    addArpSub (reharm::loc::tr ("Arp Up-Down"), kArpUpDownBase, reharm::ArpPattern::UpDown);
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&playModeButton),
+                        [this] (int resultId) { handlePlayModeMenuResult (resultId); });
+}
+
+void TransportBar::handlePlayModeMenuResult (int resultId)
+{
+    if (resultId == 0)
+        return;
+
+    if (resultId == kCloseVoicing || resultId == kOpenVoicing)
+    {
+        const bool wasArp = (pattern != reharm::ArpPattern::Off);
+        voicingClose = (resultId == kCloseVoicing);
+        pattern = reharm::ArpPattern::Off;
+
+        if (onVoicingChanged)
+            onVoicingChanged (voicingClose);
+        if (wasArp && onPlayStyleChanged)
+            onPlayStyleChanged (reharm::ArpPattern::Off);
+
+        updatePlayModeButtonLabel();
+        return;
+    }
+
+    reharm::ArpPattern newPattern = reharm::ArpPattern::Off;
+    int base = 0;
+
+    if (resultId >= kArpUpDownBase)
+    {
+        newPattern = reharm::ArpPattern::UpDown;
+        base = kArpUpDownBase;
+    }
+    else if (resultId >= kArpDownBase)
+    {
+        newPattern = reharm::ArpPattern::Down;
+        base = kArpDownBase;
+    }
+    else if (resultId >= kArpUpBase)
+    {
+        newPattern = reharm::ArpPattern::Up;
+        base = kArpUpBase;
+    }
+    else
+    {
+        return;
+    }
+
+    const int rateIndex = resultId - base;
+    if (rateIndex < 0 || rateIndex > 2)
+        return;
+
+    pattern = newPattern;
+    rate = static_cast<reharm::ArpRate> (rateIndex);
+
+    if (onPlayStyleChanged)
+        onPlayStyleChanged (pattern);
+    if (onArpRateChanged)
+        onArpRateChanged (rate);
+
+    updatePlayModeButtonLabel();
+}
+
 void TransportBar::paint (juce::Graphics& g)
 {
     g.fillAll (theme::surface);
@@ -254,10 +434,16 @@ void TransportBar::resized()
         volumeSlider.setBounds (block.withSizeKeepingCentre (block.getWidth(), 20));
     }
 
+    area.removeFromLeft (16);
+
+    const int comboH = 28;
+    const int playModeW = 190;
+    playModeButton.setBounds (area.removeFromLeft (playModeW).withSizeKeepingCentre (playModeW, comboH));
+
     auto right = getLocalBounds().reduced (16, 10);
-    pluginNameButton.setBounds (right.removeFromRight (160).withSizeKeepingCentre (160, 32));
+    pluginNameButton.setBounds (right.removeFromRight (160).withSizeKeepingCentre (160, comboH));
     right.removeFromRight (8);
-    loadButton.setBounds (right.removeFromRight (100).withSizeKeepingCentre (100, 32));
+    loadButton.setBounds (right.removeFromRight (100).withSizeKeepingCentre (100, comboH));
     right.removeFromRight (8);
-    midiBadge.setBounds (right.removeFromRight (76).withSizeKeepingCentre (76, 32));
+    midiBadge.setBounds (right.removeFromRight (76).withSizeKeepingCentre (76, comboH));
 }
