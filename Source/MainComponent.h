@@ -130,6 +130,9 @@ private:
     DisplayState display;
     reharm::UndoHistory undoHistory;
     bool restoringHistory = false;
+    /** Set while a user preset is being applied: the model lands before the preset's
+        play settings do, so the engine must not be rebuilt from the outgoing ones. */
+    bool applyingPreset = false;
     bool isPlaying = false;
     std::vector<int> currentDisplayMap;
 

@@ -478,7 +478,7 @@ void MainComponent::handleModelChanged()
     refreshAnalysis();
     chordEditor.refreshFromSelection();
 
-    if (isPlaying)
+    if (isPlaying && ! applyingPreset)
         pushChordDataToEngine();
 
     markSessionDirty();
@@ -607,7 +607,17 @@ void MainComponent::doSaveUserPreset (const juce::String& name)
 void MainComponent::loadUserPreset (const juce::String& name)
 {
     reharm::StateStore::SessionData loaded = sessionData;   // volume/plugin stay as-is
-    if (stateStore.loadUserPreset (name, model, loaded))
+
+    // A preset carries the progression and the play settings together, but the model
+    // is applied inside loadUserPreset and fires onChanged before the settings below
+    // are in place. Without this gate that notification rebuilt the engine from the
+    // outgoing settings and nothing pushed again, so a preset's arpeggio showed up on
+    // the button while playback stayed on the previous style until the next edit.
+    applyingPreset = true;
+    const bool loadedOk = stateStore.loadUserPreset (name, model, loaded);
+    applyingPreset = false;
+
+    if (loadedOk)
     {
         // Only the musical fields are applied (plugin/volume are not in the preset).
         sessionData.bpm = loaded.bpm;
@@ -626,6 +636,12 @@ void MainComponent::loadUserPreset (const juce::String& name)
         lastUserPresetName = name;
         display.clearSelection();
         updateEditorVisibility();
+
+        // Now that the settings are in place, rebuild playback once so the engine and
+        // the play-mode button agree.
+        if (isPlaying)
+            pushChordDataToEngine();
+
         markSessionDirty();
     }
 }
