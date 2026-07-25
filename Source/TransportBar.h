@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "Theme.h"
 #include "PlaybackSettings.h"
+#include "PlayModeSelection.h"
 
 /**
  * Circular play/stop toggle painted custom.
@@ -86,7 +87,7 @@ public:
     void setBpm (int bpm);
     void setVolume (float volume01); // 0..1
     void setPluginName (const juce::String& name);
-    void setVoicingClose (bool close);
+    void setVoicing (reharm::Voicing::Style voicing);
     void setPlayStyle (reharm::ArpPattern pattern);
     void setArpRate (reharm::ArpRate rate);
 
@@ -97,7 +98,7 @@ public:
     std::function<void()> onOpenPluginEditor;
     std::function<juce::File()> onPrepareMidiDragFile;
     std::function<void()> onUnloadPlugin;
-    std::function<void (bool closeVoicing)> onVoicingChanged;
+    std::function<void (reharm::Voicing::Style)> onVoicingChanged;
     std::function<void (reharm::ArpPattern)> onPlayStyleChanged;
     std::function<void (reharm::ArpRate)> onArpRateChanged;
 
@@ -116,14 +117,11 @@ private:
     MidiDragBadge midiBadge;
     bool pluginLoaded = false;
 
-    bool voicingClose = true;
-    reharm::ArpPattern pattern = reharm::ArpPattern::Off;
-    reharm::ArpRate rate = reharm::ArpRate::Eighth;
+    reharm::PlayModeSelection selection;
 
     void showPlayModeMenu();
     void handlePlayModeMenuResult (int resultId);
     void updatePlayModeButtonLabel();
-    static juce::String rateLabel (reharm::ArpRate r);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TransportBar)
 };

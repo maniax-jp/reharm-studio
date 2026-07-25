@@ -108,7 +108,7 @@ MainComponent::MainComponent()
     chordEditor.setDisplayState (&display);
 
     headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
-    transportBar.setVoicingClose (display.voicingStyle == reharm::Voicing::Style::Close);
+    transportBar.setVoicing (display.voicingStyle);
 
 
     headerBar.onKeyChanged = [this] (int tonic, bool isMajor)
@@ -170,11 +170,10 @@ MainComponent::MainComponent()
     transportBar.onLoadPlugin = [this] { loadPlugin(); };
     transportBar.onOpenPluginEditor = [this] { openPluginEditor(); };
     transportBar.onUnloadPlugin = [this] { unloadPlugin(); };
-    transportBar.onVoicingChanged = [this] (bool close)
+    transportBar.onVoicingChanged = [this] (reharm::Voicing::Style v)
     {
-        display.voicingStyle = close ? reharm::Voicing::Style::Close
-                                     : reharm::Voicing::Style::Open;
-        sessionData.voicingClose = close;
+        display.voicingStyle = v;
+        sessionData.voicing = v;
         if (isPlaying)
             pushChordDataToEngine();
         markSessionDirty();
@@ -197,7 +196,7 @@ MainComponent::MainComponent()
     };
     transportBar.onPrepareMidiDragFile = [this]() -> juce::File
     {
-        reharm::PlaybackSettings settings { display.voicingStyle, display.arpPattern, display.arpRate };
+        const auto settings = currentPlaybackSettings();
         auto data = reharm::PlaybackBuilder::build (model, settings);
         if (data == nullptr || data->totalChords == 0)
             return {};
@@ -217,9 +216,8 @@ MainComponent::MainComponent()
     if (restored)
     {
         headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
-        display.voicingStyle = sessionData.voicingClose ? reharm::Voicing::Style::Close
-                                                        : reharm::Voicing::Style::Open;
-        transportBar.setVoicingClose (sessionData.voicingClose);
+        display.voicingStyle = sessionData.voicing;
+        transportBar.setVoicing (sessionData.voicing);
         display.arpPattern = sessionData.arpPattern;
         display.arpRate = sessionData.arpRate;
         transportBar.setPlayStyle (sessionData.arpPattern);
@@ -613,15 +611,14 @@ void MainComponent::loadUserPreset (const juce::String& name)
     {
         // Only the musical fields are applied (plugin/volume are not in the preset).
         sessionData.bpm = loaded.bpm;
-        sessionData.voicingClose = loaded.voicingClose;
+        sessionData.voicing = loaded.voicing;
         sessionData.arpPattern = loaded.arpPattern;
         sessionData.arpRate = loaded.arpRate;
-        display.voicingStyle = loaded.voicingClose ? reharm::Voicing::Style::Close
-                                                   : reharm::Voicing::Style::Open;
+        display.voicingStyle = loaded.voicing;
         display.arpPattern = loaded.arpPattern;
         display.arpRate = loaded.arpRate;
         headerBar.setKey (model.getKey().tonicPitchClass, model.getKey().isMajor);
-        transportBar.setVoicingClose (loaded.voicingClose);
+        transportBar.setVoicing (loaded.voicing);
         transportBar.setPlayStyle (loaded.arpPattern);
         transportBar.setArpRate (loaded.arpRate);
         transportBar.setBpm (loaded.bpm);
@@ -633,9 +630,14 @@ void MainComponent::loadUserPreset (const juce::String& name)
     }
 }
 
+reharm::PlaybackSettings MainComponent::currentPlaybackSettings() const
+{
+    return { display.voicingStyle, display.arpPattern, display.arpRate };
+}
+
 void MainComponent::pushChordDataToEngine()
 {
-    reharm::PlaybackSettings settings { display.voicingStyle, display.arpPattern, display.arpRate };
+    const auto settings = currentPlaybackSettings();
     auto data = reharm::PlaybackBuilder::build (model, settings);
     currentDisplayMap = data->displayIndices;
     audioEngine->setChordData (data);

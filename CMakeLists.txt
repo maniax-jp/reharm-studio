@@ -122,6 +122,7 @@ target_sources(ReharmStudioTests PRIVATE
     Tests/ProgressionModelTest.cpp
     Tests/HarmonyAnalyzerTest.cpp
     Tests/StateStoreTest.cpp
+    Tests/PlayModeSelectionTest.cpp
     Tests/UndoHistoryTest.cpp
     Tests/PlaybackBuilderTest.cpp
     Tests/VoiceLeadingTest.cpp

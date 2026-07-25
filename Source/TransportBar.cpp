@@ -245,33 +245,25 @@ void TransportBar::setPluginName (const juce::String& name)
     }
 }
 
-void TransportBar::setVoicingClose (bool close)
+void TransportBar::setVoicing (reharm::Voicing::Style voicing)
 {
-    voicingClose = close;
+    selection.voicing = voicing;
+    selection = reharm::normalize (selection);
     updatePlayModeButtonLabel();
 }
 
 void TransportBar::setPlayStyle (reharm::ArpPattern p)
 {
-    pattern = p;
+    selection.pattern = p;
+    selection = reharm::normalize (selection);
     updatePlayModeButtonLabel();
 }
 
 void TransportBar::setArpRate (reharm::ArpRate r)
 {
-    rate = r;
+    selection.rate = r;
+    selection = reharm::normalize (selection);
     updatePlayModeButtonLabel();
-}
-
-juce::String TransportBar::rateLabel (reharm::ArpRate r)
-{
-    switch (r)
-    {
-        case reharm::ArpRate::Quarter:   return "1/4";
-        case reharm::ArpRate::Sixteenth: return "1/16";
-        case reharm::ArpRate::Eighth:
-        default:                         return "1/8";
-    }
 }
 
 void TransportBar::updatePlayModeButtonLabel()
@@ -279,53 +271,8 @@ void TransportBar::updatePlayModeButtonLabel()
     // The button label stays in English (short forms), even though the popup menu
     // that sets it is localised: a compact "Arp Up-Down Open 1/8" reads better in
     // the transport bar than the equivalent Japanese, which is long and clumsy.
-    const juce::String voicingName = voicingClose ? "Close" : "Open";
-
-    if (pattern == reharm::ArpPattern::Off)
-    {
-        playModeButton.setButtonText ("Block " + voicingName);
-        return;
-    }
-
-    juce::String styleName;
-    switch (pattern)
-    {
-        case reharm::ArpPattern::Up:     styleName = "Arp Up"; break;
-        case reharm::ArpPattern::Down:   styleName = "Arp Down"; break;
-        case reharm::ArpPattern::UpDown: styleName = "Arp Up-Down"; break;
-        case reharm::ArpPattern::Off:
-        default:                         styleName = "Block"; break;
-    }
-
-    playModeButton.setButtonText (styleName + " " + voicingName + " " + rateLabel (rate));
+    playModeButton.setButtonText (reharm::buttonLabel (selection));
 }
-
-namespace
-{
-/** Play-mode popup item IDs.
-    Block: 1 = Close, 2 = Open.
-    Arp:   100 + patternIdx*20 + voicingIdx*10 + rateIdx
-           patternIdx Up=0 Down=1 UpDown=2 ; voicingIdx Close=0 Open=1 ; rateIdx 0..2. */
-constexpr int kBlockClose = 1;
-constexpr int kBlockOpen  = 2;
-constexpr int kArpBase    = 100;
-
-int arpItemId (int patternIdx, int voicingIdx, reharm::ArpRate r)
-{
-    return kArpBase + patternIdx * 20 + voicingIdx * 10 + (int) r;
-}
-
-int patternIdxOf (reharm::ArpPattern p)
-{
-    switch (p)
-    {
-        case reharm::ArpPattern::Up:     return 0;
-        case reharm::ArpPattern::Down:   return 1;
-        case reharm::ArpPattern::UpDown: return 2;
-        default:                         return -1;
-    }
-}
-} // namespace
 
 void TransportBar::showPlayModeMenu()
 {
@@ -334,42 +281,46 @@ void TransportBar::showPlayModeMenu()
 
     {
         juce::PopupMenu block;
-        block.addItem (kBlockClose, reharm::loc::tr ("Close Voicing"),
-                       true, pattern == reharm::ArpPattern::Off && voicingClose);
-        block.addItem (kBlockOpen, reharm::loc::tr ("Open Voicing"),
-                       true, pattern == reharm::ArpPattern::Off && ! voicingClose);
+        block.addItem (reharm::toMenuId ({ reharm::ArpPattern::Off, reharm::Voicing::Style::Close, selection.rate }),
+                       reharm::loc::tr ("Close Voicing"), true,
+                       selection.pattern == reharm::ArpPattern::Off && selection.voicing == reharm::Voicing::Style::Close);
+        block.addItem (reharm::toMenuId ({ reharm::ArpPattern::Off, reharm::Voicing::Style::Open, selection.rate }),
+                       reharm::loc::tr ("Open Voicing"), true,
+                       selection.pattern == reharm::ArpPattern::Off && selection.voicing == reharm::Voicing::Style::Open);
+        block.addItem (reharm::toMenuId ({ reharm::ArpPattern::Off, reharm::Voicing::Style::Auto, selection.rate }),
+                       reharm::loc::tr ("Auto Voicing"), true,
+                       selection.pattern == reharm::ArpPattern::Off && selection.voicing == reharm::Voicing::Style::Auto);
         menu.addSubMenu (reharm::loc::tr ("Block Chord"), block);
     }
 
-    const int curPatternIdx = patternIdxOf (pattern);
-
-    // Each arp pattern gets a Close/Open submenu, each with the three rates.
-    auto addArpSub = [&] (const juce::String& title, reharm::ArpPattern p, int patternIdx)
+    // Each arp pattern gets a Close/Open submenu, each with the three rates. Auto is
+    // deliberately not offered here: it is a block-chord-only feature, so leaving it
+    // out of this submenu makes "Auto while arpeggiating" unreachable from the UI,
+    // matching what PlaybackBuilder actually does (it folds Auto to Close for arps).
+    auto addArpSub = [&] (const juce::String& title, reharm::ArpPattern p)
     {
         juce::PopupMenu patternMenu;
 
-        auto addVoicingSub = [&] (const juce::String& vTitle, int voicingIdx, bool wantClose)
+        auto addVoicingSub = [&] (const juce::String& vTitle, reharm::Voicing::Style v)
         {
             juce::PopupMenu rates;
             for (auto r : { reharm::ArpRate::Quarter, reharm::ArpRate::Eighth, reharm::ArpRate::Sixteenth })
             {
-                const bool ticked = (curPatternIdx == patternIdx)
-                                    && (voicingClose == wantClose)
-                                    && (rate == r);
-                rates.addItem (arpItemId (patternIdx, voicingIdx, r), rateLabel (r), true, ticked);
+                const bool ticked = (selection.pattern == p) && (selection.voicing == v) && (selection.rate == r);
+                rates.addItem (reharm::toMenuId ({ p, v, r }), reharm::rateLabel (r), true, ticked);
             }
             patternMenu.addSubMenu (vTitle, rates);
         };
 
-        addVoicingSub (reharm::loc::tr ("Close Voicing"), 0, true);
-        addVoicingSub (reharm::loc::tr ("Open Voicing"),  1, false);
+        addVoicingSub (reharm::loc::tr ("Close Voicing"), reharm::Voicing::Style::Close);
+        addVoicingSub (reharm::loc::tr ("Open Voicing"),  reharm::Voicing::Style::Open);
 
         menu.addSubMenu (title, patternMenu);
     };
 
-    addArpSub (reharm::loc::tr ("Arp Up"),      reharm::ArpPattern::Up,     0);
-    addArpSub (reharm::loc::tr ("Arp Down"),    reharm::ArpPattern::Down,   1);
-    addArpSub (reharm::loc::tr ("Arp Up-Down"), reharm::ArpPattern::UpDown, 2);
+    addArpSub (reharm::loc::tr ("Arp Up"),      reharm::ArpPattern::Up);
+    addArpSub (reharm::loc::tr ("Arp Down"),    reharm::ArpPattern::Down);
+    addArpSub (reharm::loc::tr ("Arp Up-Down"), reharm::ArpPattern::UpDown);
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&playModeButton),
                         [this] (int resultId) { handlePlayModeMenuResult (resultId); });
@@ -377,54 +328,20 @@ void TransportBar::showPlayModeMenu()
 
 void TransportBar::handlePlayModeMenuResult (int resultId)
 {
-    if (resultId == 0)
+    reharm::PlayModeSelection next;
+    if (! reharm::applyMenuId (resultId, selection, next))
         return;
 
-    if (resultId == kBlockClose || resultId == kBlockOpen)
-    {
-        const bool wasArp = (pattern != reharm::ArpPattern::Off);
-        voicingClose = (resultId == kBlockClose);
-        pattern = reharm::ArpPattern::Off;
-
-        if (onVoicingChanged)
-            onVoicingChanged (voicingClose);
-        if (wasArp && onPlayStyleChanged)
-            onPlayStyleChanged (reharm::ArpPattern::Off);
-
-        updatePlayModeButtonLabel();
-        return;
-    }
-
-    if (resultId < kArpBase)
-        return;
-
-    const int enc = resultId - kArpBase;
-    const int patternIdx = enc / 20;
-    const int voicingIdx = (enc % 20) / 10;
-    const int rateIdx    = enc % 10;
-
-    static const reharm::ArpPattern patterns[3] = { reharm::ArpPattern::Up,
-                                                    reharm::ArpPattern::Down,
-                                                    reharm::ArpPattern::UpDown };
-    if (patternIdx < 0 || patternIdx > 2 || rateIdx < 0 || rateIdx > 2)
-        return;
-
-    const bool newVoicingClose = (voicingIdx == 0);
-    const bool voicingChanged = (newVoicingClose != voicingClose);
-
-    voicingClose = newVoicingClose;
-    pattern = patterns[patternIdx];
-    rate = static_cast<reharm::ArpRate> (rateIdx);
-
-    // Voicing affects the arpeggio note content, so notify voicing first.
-    if (voicingChanged && onVoicingChanged)
-        onVoicingChanged (voicingClose);
-    if (onPlayStyleChanged)
-        onPlayStyleChanged (pattern);
-    if (onArpRateChanged)
-        onArpRateChanged (rate);
-
+    const auto prev = selection;
+    selection = next;
     updatePlayModeButtonLabel();
+
+    if (selection.voicing != prev.voicing && onVoicingChanged)
+        onVoicingChanged (selection.voicing);
+    if (selection.pattern != prev.pattern && onPlayStyleChanged)
+        onPlayStyleChanged (selection.pattern);
+    if (selection.rate != prev.rate && onArpRateChanged)
+        onArpRateChanged (selection.rate);
 }
 
 void TransportBar::paint (juce::Graphics& g)

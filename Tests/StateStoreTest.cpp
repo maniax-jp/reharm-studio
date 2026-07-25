@@ -52,7 +52,7 @@ public:
             StateStore::SessionData s;
             s.bpm = 97;
             s.volume = 0.33f;
-            s.voicingClose = false;
+            s.voicing = Voicing::Style::Open;
             s.pluginPath = "/Library/Audio/Plug-Ins/VST3/Test.vst3";
             s.pluginName = "Test Plugin";
             s.pluginStateB64 = "QUJDRA=="; // "ABCD"
@@ -86,7 +86,7 @@ public:
 
             expectEquals (s2.bpm, s.bpm);
             expectWithinAbsoluteError (s2.volume, s.volume, 0.0001f);
-            expect (s2.voicingClose == s.voicingClose);
+            expect (s2.voicing == s.voicing);
             expect (s2.pluginPath == s.pluginPath);
             expect (s2.pluginName == s.pluginName);
             expect (s2.pluginStateB64 == s.pluginStateB64);
@@ -152,6 +152,109 @@ public:
             expect (s4.arpRate == ArpRate::Eighth);
         }
 
+        beginTest ("voicing: Close/Open/Auto round-trip through serialize/deserialize");
+        {
+            for (auto voicing : { Voicing::Style::Close, Voicing::Style::Open, Voicing::Style::Auto })
+            {
+                ProgressionModel model;
+                model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
+
+                StateStore::SessionData s;
+                s.voicing = voicing;
+
+                const auto v = StateStore::serialize (model, s);
+
+                ProgressionModel model2;
+                StateStore::SessionData s2;
+                expect (StateStore::deserialize (v, model2, s2));
+                expect (s2.voicing == voicing);
+            }
+        }
+
+        beginTest ("voicing: serialized JSON string is \"close\"/\"open\"/\"auto\"");
+        {
+            ProgressionModel model;
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
+
+            auto checkJsonValue = [&] (Voicing::Style voicing, const juce::String& expected)
+            {
+                StateStore::SessionData s;
+                s.voicing = voicing;
+                const auto v = StateStore::serialize (model, s);
+                expect (v.getProperty ("voicing", juce::var()).toString() == expected);
+            };
+
+            checkJsonValue (Voicing::Style::Close, "close");
+            checkJsonValue (Voicing::Style::Open, "open");
+            checkJsonValue (Voicing::Style::Auto, "auto");
+        }
+
+        beginTest ("voicing: missing/unknown value falls back to Auto (no branching on prior state)");
+        {
+            ProgressionModel model;
+
+            auto* barObj = new juce::DynamicObject();
+            barObj->setProperty ("div", 1);
+            juce::Array<juce::var> slots;
+            slots.add (juce::var());
+            barObj->setProperty ("slots", juce::var (slots));
+            juce::Array<juce::var> bars;
+            bars.add (juce::var (barObj));
+
+            // "voicing" key absent entirely.
+            auto* rootMissing = new juce::DynamicObject();
+            rootMissing->setProperty ("schema", 1);
+            rootMissing->setProperty ("bpm", 120);
+            rootMissing->setProperty ("bars", juce::var (bars));
+
+            StateStore::SessionData sMissing;
+            sMissing.voicing = Voicing::Style::Close;   // sentinel: must be overwritten, not kept
+            expect (StateStore::deserialize (juce::var (rootMissing), model, sMissing));
+            expect (sMissing.voicing == Voicing::Style::Auto);
+
+            // "voicing": "bogus" (unknown value).
+            juce::Array<juce::var> bars2;
+            bars2.add (juce::var (barObj));
+            auto* rootBogus = new juce::DynamicObject();
+            rootBogus->setProperty ("schema", 1);
+            rootBogus->setProperty ("bpm", 120);
+            rootBogus->setProperty ("bars", juce::var (bars2));
+            rootBogus->setProperty ("voicing", "bogus");
+
+            StateStore::SessionData sBogus;
+            sBogus.voicing = Voicing::Style::Close;   // sentinel: must be overwritten, not kept
+            expect (StateStore::deserialize (juce::var (rootBogus), model, sBogus));
+            expect (sBogus.voicing == Voicing::Style::Auto);
+        }
+
+        beginTest ("voicing: Auto + arpeggio in a hand-edited file is normalized to Close on load");
+        {
+            auto* barObj = new juce::DynamicObject();
+            barObj->setProperty ("div", 1);
+            juce::Array<juce::var> slots;
+            slots.add (juce::var());
+            barObj->setProperty ("slots", juce::var (slots));
+            juce::Array<juce::var> bars;
+            bars.add (juce::var (barObj));
+
+            auto* arpObj = new juce::DynamicObject();
+            arpObj->setProperty ("pattern", "up");
+            arpObj->setProperty ("rate", "8");
+
+            auto* root = new juce::DynamicObject();
+            root->setProperty ("schema", 1);
+            root->setProperty ("bpm", 120);
+            root->setProperty ("bars", juce::var (bars));
+            root->setProperty ("voicing", "auto");
+            root->setProperty ("arp", juce::var (arpObj));
+
+            ProgressionModel model;
+            StateStore::SessionData s;
+            expect (StateStore::deserialize (juce::var (root), model, s));
+            expect (s.arpPattern == ArpPattern::Up);
+            expect (s.voicing == Voicing::Style::Close);
+        }
+
         beginTest ("musicalOnly: no plugin/volume fields; deserialize keeps default volume");
         {
             ProgressionModel model;
@@ -170,6 +273,7 @@ public:
             expect (obj != nullptr);
             expect (! obj->hasProperty ("plugin"));
             expect (! obj->hasProperty ("volume"));
+            expect (obj->hasProperty ("voicing"));   // written even in musicalOnly mode
 
             ProgressionModel model2;
             StateStore::SessionData s2;
@@ -178,6 +282,30 @@ public:
             expect (ok);
             expectWithinAbsoluteError (s2.volume, 0.8f, 0.0001f);
             expect (s2.pluginPath.isEmpty());
+        }
+
+        beginTest ("musicalOnly: Auto voicing survives a user-preset save/load round trip");
+        {
+            auto tempBase = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                .getChildFile ("reharm-statestore-auto-preset-test");
+            tempBase.deleteRecursively();
+
+            StateStore store (tempBase);
+
+            ProgressionModel model;
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
+
+            StateStore::SessionData s;
+            s.voicing = Voicing::Style::Auto;
+
+            expect (store.saveUserPreset ("Auto Preset", model, s));
+
+            ProgressionModel loaded;
+            StateStore::SessionData loadedSession;
+            expect (store.loadUserPreset ("Auto Preset", loaded, loadedSession));
+            expect (loadedSession.voicing == Voicing::Style::Auto);
+
+            tempBase.deleteRecursively();
         }
 
         beginTest ("Invalid input: null var / missing bars leaves model untouched");
@@ -249,7 +377,7 @@ public:
             StateStore::SessionData s;
             s.bpm = 110;
             s.volume = 0.6f;
-            s.voicingClose = true;
+            s.voicing = Voicing::Style::Close;
 
             expect (store.saveSession (model, s));
             expect (store.sessionFile().existsAsFile());

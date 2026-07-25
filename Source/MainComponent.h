@@ -97,6 +97,8 @@ private:
     void refreshAnalysis();
     void updateEditorVisibility();
 
+    reharm::PlaybackSettings currentPlaybackSettings() const;
+
     void markSessionDirty();
     void saveSessionNow();
     void refreshPluginStateCache();

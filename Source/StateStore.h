@@ -26,7 +26,7 @@ public:
     {
         int bpm = 120;
         float volume = 0.8f;
-        bool voicingClose = true;          // true=Close, false=Open
+        Voicing::Style voicing = Voicing::Style::Auto;
         juce::String pluginPath;           // empty = no plugin
         juce::String pluginName;
         juce::String pluginStateB64;       // Base64; empty = no state

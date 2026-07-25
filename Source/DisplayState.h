@@ -7,7 +7,7 @@
 /** Shared UI display / selection state owned by MainComponent. */
 struct DisplayState
 {
-    reharm::Voicing::Style voicingStyle = reharm::Voicing::Style::Close;
+    reharm::Voicing::Style voicingStyle = reharm::Voicing::Style::Auto;
     int selectedBar = -1;
     int selectedSlot = -1;
     std::optional<reharm::Chord> chordClipboard;   // Cmd+C internal clipboard

@@ -1,4 +1,5 @@
 #include "StateStore.h"
+#include "PlayModeSelection.h"
 
 namespace reharm
 {
@@ -122,6 +123,28 @@ ArpRate arpRateFromString (const juce::String& s)
     if (s == "16") return ArpRate::Sixteenth;
     return ArpRate::Eighth;
 }
+
+juce::String voicingToString (Voicing::Style v)
+{
+    switch (v)
+    {
+        case Voicing::Style::Close: return "close";
+        case Voicing::Style::Open:  return "open";
+        case Voicing::Style::Auto:
+        default:                    return "auto";
+    }
+}
+
+// Falls back to Auto for missing/unknown values, matching this file's existing
+// convention that a JSON fallback equals the SessionData member's default (see
+// arpPatternFromString/arpRateFromString above). Existing session files always
+// carry "close" or "open", so only fresh installs pick up the new Auto default.
+Voicing::Style voicingFromString (const juce::String& s)
+{
+    if (s == "close") return Voicing::Style::Close;
+    if (s == "open")  return Voicing::Style::Open;
+    return Voicing::Style::Auto;
+}
 } // namespace
 
 StateStore::StateStore (const juce::File& baseDirectory)
@@ -146,7 +169,7 @@ juce::var StateStore::serialize (const ProgressionModel& model, const SessionDat
     if (! musicalOnly)
         root->setProperty ("volume", s.volume);
 
-    root->setProperty ("voicing", s.voicingClose ? "close" : "open");
+    root->setProperty ("voicing", voicingToString (s.voicing));
 
     auto* arpObj = new juce::DynamicObject();
     arpObj->setProperty ("pattern", arpPatternToString (s.arpPattern));
@@ -240,7 +263,7 @@ bool StateStore::deserialize (const juce::var& v, ProgressionModel& model, Sessi
     volume = juce::jlimit (0.0, 1.0, volume);
 
     const auto voicingStr = v.getProperty ("voicing", juce::var()).toString();
-    const bool voicingClose = (voicingStr != "open");
+    const Voicing::Style voicing = voicingFromString (voicingStr);
 
     const auto arpVar = v.getProperty ("arp", juce::var());
     const auto arpPatternStr = arpVar.getProperty ("pattern", juce::var()).toString();
@@ -275,9 +298,17 @@ bool StateStore::deserialize (const juce::var& v, ProgressionModel& model, Sessi
 
     s.bpm = bpm;
     s.volume = static_cast<float> (volume);
-    s.voicingClose = voicingClose;
+    s.voicing = voicing;
     s.arpPattern = arpPattern;
     s.arpRate = arpRate;
+
+    // Keep the restored combination reachable from the UI: Auto is a block-chord
+    // feature, so a hand-edited file asking for Auto + arpeggio is collapsed here
+    // rather than leaving the UI showing something the engine will not do.
+    const auto normalized = normalize (PlayModeSelection { s.arpPattern, s.voicing, s.arpRate });
+    s.arpPattern = normalized.pattern;
+    s.voicing = normalized.voicing;
+    s.arpRate = normalized.rate;
 
     const auto pluginVar = v.getProperty ("plugin", juce::var());
     if (pluginVar.isObject())
