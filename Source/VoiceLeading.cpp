@@ -38,6 +38,24 @@ bool vectorLess (const std::vector<int>& a, const std::vector<int>& b)
     }
     return a.size() < b.size();
 }
+
+// Drops the voice(s) at the given 1-based positions counted from the top of an
+// ascending stack down an octave, then re-sorts. fromTopOneBased == {2} is the
+// standard jazz drop-2 (second-highest voice moved below the rest); {3} is
+// drop-3; {2, 4} is drop-2-and-4. Positions beyond the stack size are a no-op
+// (callers guard with a size check before using drop3/drop24).
+std::vector<int> dropVoicing (std::vector<int> stack, std::initializer_list<int> fromTopOneBased)
+{
+    const int n = static_cast<int> (stack.size());
+    for (int pos : fromTopOneBased)
+    {
+        const int idx = n - pos;
+        if (idx >= 0 && idx < n)
+            stack[static_cast<size_t> (idx)] -= 12;
+    }
+    std::sort (stack.begin(), stack.end());
+    return stack;
+}
 } // namespace
 
 VoiceLeader::VoiceLeader() = default;
@@ -114,25 +132,46 @@ std::vector<std::vector<int>> VoiceLeader::candidates (const Chord& c, const Opt
     {
         for (int k = -o.octaveRadius; k <= o.octaveRadius; ++k)
         {
-            std::vector<int> cand;
-            cand.reserve (static_cast<size_t> (n));
+            std::vector<int> closedCand;
+            closedCand.reserve (static_cast<size_t> (n));
             for (int i = 0; i < n; ++i)
-                cand.push_back (o.anchorLowest + rootPc + 12 * k + shapes[static_cast<size_t> (r)][static_cast<size_t> (i)]);
+                closedCand.push_back (o.anchorLowest + rootPc + 12 * k + shapes[static_cast<size_t> (r)][static_cast<size_t> (i)]);
 
-            if (cand[0] < o.lowestMin || cand[0] > o.lowestMax)
-                continue;
-
-            bool duplicate = false;
-            for (const auto& existing : result)
+            // For each closed rotation, also offer its standard drop derivatives.
+            // A closed voicing's non-root inversions can be forced into an
+            // adjacent semitone (e.g. every closed inversion of a maj7 but the
+            // root position); opening the stack via drop-2/3/24 gives the search
+            // a way to keep the same pitch classes without that clash.
+            std::vector<std::vector<int>> variants;
+            variants.push_back (closedCand);
+            if (n >= 3)
+                variants.push_back (dropVoicing (closedCand, { 2 }));       // drop2
+            if (n >= 4)
             {
-                if (existing == cand)
-                {
-                    duplicate = true;
-                    break;
-                }
+                variants.push_back (dropVoicing (closedCand, { 3 }));       // drop3
+                variants.push_back (dropVoicing (closedCand, { 2, 4 }));    // drop2-and-4
             }
-            if (! duplicate)
-                result.push_back (std::move (cand));
+
+            for (auto& cand : variants)
+            {
+                if (cand[0] < o.lowestMin || cand[0] > o.lowestMax)
+                    continue;
+
+                if (cand.back() - cand.front() > o.maxSpan)
+                    continue;
+
+                bool duplicate = false;
+                for (const auto& existing : result)
+                {
+                    if (existing == cand)
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (! duplicate)
+                    result.push_back (std::move (cand));
+            }
         }
     }
 
@@ -170,22 +209,40 @@ int VoiceLeader::cost (const std::vector<int>& prevStack,
 
     // Avoid a minor 2nd between adjacent voices: the algorithm should not create a
     // half-step clash the chord itself did not ask for. Counted per occurrence, and
-    // deliberately a penalty rather than a hard veto -- every inversion of a maj7
-    // contains one, so vetoing would pin those chords to root position forever and
-    // destroy the voice leading. A large movement saving can still outweigh it.
+    // deliberately a penalty rather than a hard veto -- so that a candidate with a
+    // semitone can still win when it saves enough movement (a soft preference, not
+    // a ban). In practice a semitone-free option is almost always available anyway:
+    // candidates() includes drop voicings alongside closed ones, and a drop-2 dodges
+    // the clash every non-root closed inversion of a maj7 has, e.g. {-1,4,7,12}
+    // (= B E G C) for CM7. A large movement saving can still outweigh the penalty.
     // Note: exactly 1 semitone only. A minor 9th (13) between adjacent voices is a
     // normal open sonority and is not penalised.
     for (size_t i = 1; i < candStack.size(); ++i)
         if (candStack[i] - candStack[i - 1] == 1)
             result += o.semitonePenalty;
 
+    // Prefer compact voicings. Without this, drop forms win by default: a wider
+    // voicing can sit near more of the previous chord's notes, so each chord of a
+    // repeating loop spreads a little further and the bottom ratchets downwards --
+    // the same four bars sounded lower on every repeat. Spans up to preferredSpan
+    // are free, so the standard drop-2 of a seventh chord (span 13, e.g. B E G C
+    // for CM7) is still reachable when it genuinely leads better.
+    if (candStack.size() >= 2)
+    {
+        const int span = candStack.back() - candStack.front();
+        if (span > o.preferredSpan)
+            result += o.spanWeight * (span - o.preferredSpan);
+    }
+
     return result;
 }
 
 std::vector<int> VoiceLeader::next (const Chord& c)
 {
-    // Auto rendering is close-position only; Open drop-2 is never applied here
-    // (avoids duplicating Open logic and the risk of drifting out of sync with it).
+    // Auto considers both closed and drop voicings as candidates (see
+    // candidates()), but it does not call into or duplicate Voicing::Style::Open's
+    // drop-2 implementation -- candidates() enumerates its own placements, so this
+    // search never needs to stay in sync with Open's.
 
     if (! prevStack.has_value())
     {

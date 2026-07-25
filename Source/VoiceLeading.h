@@ -22,6 +22,9 @@ public:
         int centerWeight = 1;
         int bottomClusterPenalty = 8;         // bottom pair closer than 3 semitones
         int semitonePenalty = 8;              // any adjacent pair exactly 1 semitone apart
+        int maxSpan = 24;                     // widest allowed voicing, lowest to highest
+        int preferredSpan = 13;               // spans up to here are not penalised
+        int spanWeight = 5;                   // per semitone of span beyond preferredSpan
     };
 
     // Two overloads rather than `Options o = {}`: a defaulted argument here would
@@ -50,8 +53,11 @@ public:
     /** Ascending chord tones stacked from the root at octaveBase. No explicit bass. */
     static std::vector<int> closeStack (const Chord& c, int octaveBase = 60);
 
-    /** All in-window candidate stacks, in canonical order (rotation asc, octave asc),
-        de-duplicated. Never empty for a chord with at least one tone. */
+    /** All in-window candidate stacks, in canonical order (rotation asc, octave asc,
+        and for each rotation: closed then drop2/drop3/drop24), de-duplicated and
+        limited to o.maxSpan. Includes both closed (ladder) inversions and their
+        standard jazz drop placements, so the search is not restricted to closed
+        voicings alone. Never empty for a chord with at least one tone. */
     static std::vector<std::vector<int>> candidates (const Chord& c, const Options& o);
 
     /** Cost of moving from prevStack to candStack. Lower is better. */

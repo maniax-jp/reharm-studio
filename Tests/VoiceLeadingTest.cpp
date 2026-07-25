@@ -388,11 +388,13 @@ public:
 
             expect (c1 == std::vector<int> ({ 60, 64, 67 }));
             expect (g1 == std::vector<int> ({ 59, 62, 67 }));
-            expect (cm7 == std::vector<int> ({ 60, 64, 67, 71 }));
-            // Without the semitone penalty, {59,60,64,67} (cost 19) narrowly beats
-            // {60,64,67,71} (cost 20); the penalty (8, applied once) flips that to 27
-            // vs 20, so this specifically exercises the new rule rather than being
-            // incidental.
+            // Updated once drop voicings joined the candidate pool: {59,64,67,72}
+            // (a drop-2 of shape(1), = {-1,4,7,12} + 60) costs 19 from {59,62,67},
+            // beating the former winner {60,64,67,71} (cost 20) outright, with no
+            // semitone anywhere -- so this is a strict improvement, not a tradeoff.
+            expect (cm7 == std::vector<int> ({ 59, 64, 67, 72 }));
+            // The rule this test exercises still holds: the semitone-containing
+            // {59,60,64,67} (cost 19 without the penalty, 27 with it) must not win.
             expect (cm7 != std::vector<int> ({ 59, 60, 64, 67 }));
         }
 
@@ -416,8 +418,11 @@ public:
             }
 
             // Non-exempt (contrast): CM7's own close voicing has no semitone, so the
-            // extreme penalty applies in full and pins the result to the root-position
-            // close voicing (the only rotation with no adjacent semitone).
+            // extreme penalty applies in full and must steer the search away from any
+            // adjacent semitone. With drop voicings in the candidate pool this is no
+            // longer necessarily the root-position close voicing (that was only true
+            // when closed rotations were the sole option), so this checks the actual
+            // invariant -- semitone-free -- rather than pinning to one specific stack.
             {
                 VoiceLeader leader (extreme);
                 const Chord B { 11, ChordQuality::Major, -1 };
@@ -426,7 +431,6 @@ public:
                 leader.next (B);
                 const auto result = leader.next (CM7);
                 expect (! hasAdjacentSemitone (result));
-                expect (result == std::vector<int> ({ 60, 64, 67, 71 }));
             }
         }
 
@@ -435,6 +439,143 @@ public:
             const VoiceLeader::Options defaultOpts;
             expectEquals (defaultOpts.semitonePenalty, 8);
         }
+
+        beginTest ("19. Drop voicings are present among candidates()");
+        {
+            const Chord CM7 { 0, ChordQuality::Major7, -1 };
+            const VoiceLeader::Options opts;
+
+            const auto cands = VoiceLeader::candidates (CM7, opts);
+
+            // {-1,4,7,12} + 60 = {59,64,67,72}: drop-2 of shape(1) = {4,7,11,12}.
+            const std::vector<int> drop2 { 59, 64, 67, 72 };
+            expect (std::find (cands.begin(), cands.end(), drop2) != cands.end());
+
+            std::set<std::vector<int>> seen;
+            for (const auto& cand : cands)
+            {
+                expect (cand.back() - cand.front() <= opts.maxSpan);
+                expect (cand[0] >= opts.lowestMin && cand[0] <= opts.lowestMax);
+                expect (seen.find (cand) == seen.end()); // no duplicates, drops included
+                seen.insert (cand);
+            }
+        }
+
+        beginTest ("20. maj7 can invert without a semitone (drop voicings widen the choice)");
+        {
+            const Chord CM7 { 0, ChordQuality::Major7, -1 };
+            const VoiceLeader::Options opts;
+
+            const auto cands = VoiceLeader::candidates (CM7, opts);
+
+            int semitoneFreeCount = 0;
+            for (const auto& cand : cands)
+                if (! hasAdjacentSemitone (cand))
+                    ++semitoneFreeCount;
+
+            // Not pinned to the root-position close voicing alone.
+            expect (semitoneFreeCount >= 2);
+
+            const std::vector<int> drop2 { 59, 64, 67, 72 };
+            expect (! hasAdjacentSemitone (drop2));
+        }
+
+        beginTest ("21. maxSpan rejects overly wide candidates without emptying the result");
+        {
+            const Chord CM7 { 0, ChordQuality::Major7, -1 }; // root-position close span = 11
+            VoiceLeader::Options narrow;
+            narrow.maxSpan = 12;
+
+            const auto cands = VoiceLeader::candidates (CM7, narrow);
+            expect (! cands.empty());
+
+            for (const auto& cand : cands)
+                expect (cand.back() - cand.front() <= narrow.maxSpan);
+        }
+
+        beginTest ("22. Loop stability with seventh chords: the loop settles and never sinks");
+        {
+            // The drop-voicing candidates made this necessary: a wider voicing can sit
+            // near more of the previous chord's notes, so without the span preference
+            // every repeat spread further and the bottom ratcheted downwards. Only the
+            // triad loop (test 7) was guarded before, which let that through.
+            auto runCycles = [] (const std::vector<Chord>& prog, int cycles)
+            {
+                VoiceLeader leader;
+                std::vector<std::vector<std::vector<int>>> out;
+                for (int cycle = 0; cycle < cycles; ++cycle)
+                {
+                    std::vector<std::vector<int>> lap;
+                    for (const auto& c : prog)
+                        lap.push_back (leader.next (c));
+                    out.push_back (std::move (lap));
+                }
+                return out;
+            };
+
+            const std::vector<Chord> iiVI {
+                Chord { 2, ChordQuality::Minor7, -1 },
+                Chord { 7, ChordQuality::Dominant7, -1 },
+                Chord { 0, ChordQuality::Major7, -1 },
+            };
+
+            const std::vector<Chord> autumn {
+                Chord { 2, ChordQuality::Minor7, -1 },
+                Chord { 7, ChordQuality::Dominant7, -1 },
+                Chord { 0, ChordQuality::Major7, -1 },
+                Chord { 5, ChordQuality::Major7, -1 },
+                Chord { 11, ChordQuality::Minor7Flat5, -1 },
+                Chord { 4, ChordQuality::Dominant7, -1 },
+                Chord { 9, ChordQuality::Minor7, -1 },
+            };
+
+            // The first lap starts from the fixed legacy anchor, so the fixed point is
+            // reached from lap 2 onwards; every later lap must repeat it exactly.
+            for (const auto& prog : { iiVI, autumn })
+            {
+                const auto laps = runCycles (prog, 5);
+                for (size_t cycle = 2; cycle < laps.size(); ++cycle)
+                    expect (laps[cycle] == laps[1]);
+
+                // And no lap may sink below the window while getting there.
+                const VoiceLeader::Options opts;
+                for (const auto& lap : laps)
+                    for (const auto& stack : lap)
+                        expect (stack[0] >= opts.lowestMin && stack[0] <= opts.lowestMax);
+            }
+
+            // ii-V-I in C settles immediately on idiomatic voicings: D F A C / D F G B
+            // (5th in the bass, holding D and F) / C E G B.
+            const auto iiVILaps = runCycles (iiVI, 3);
+            expect (iiVILaps[0][0] == std::vector<int> ({ 62, 65, 69, 72 }));
+            expect (iiVILaps[0][1] == std::vector<int> ({ 62, 65, 67, 71 }));
+            expect (iiVILaps[0][2] == std::vector<int> ({ 60, 64, 67, 71 }));
+            expect (iiVILaps[1] == iiVILaps[0]);
+            expect (iiVILaps[2] == iiVILaps[0]);
+        }
+
+        beginTest ("23. Span beyond preferredSpan is penalised per semitone");
+        {
+            const VoiceLeader::Options def;
+            VoiceLeader::Options noSpan = def;
+            noSpan.spanWeight = 0;
+
+            const std::vector<int> prev { 60, 64, 67 };
+
+            // Span 13 (the drop-2 CM7 B E G C) is free: it is a normal jazz voicing.
+            const std::vector<int> drop2 { 59, 64, 67, 72 };
+            expectEquals (drop2.back() - drop2.front(), 13);
+            expectEquals (VoiceLeader::cost (prev, drop2, def),
+                          VoiceLeader::cost (prev, drop2, noSpan));
+
+            // Span 16 costs (16 - 13) * spanWeight more than with the penalty disabled.
+            const std::vector<int> wide { 55, 60, 64, 71 };
+            expectEquals (wide.back() - wide.front(), 16);
+            expectEquals (VoiceLeader::cost (prev, wide, def)
+                              - VoiceLeader::cost (prev, wide, noSpan),
+                          (16 - def.preferredSpan) * def.spanWeight);
+        }
+
     }
 };
 
