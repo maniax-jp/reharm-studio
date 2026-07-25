@@ -81,6 +81,7 @@ target_sources(ReharmStudio PRIVATE
     Source/TransportBar.cpp
     Source/StateStore.cpp
     Source/PlaybackBuilder.cpp
+    Source/VoiceLeading.cpp
     Source/MidiExporter.cpp
 )
 
@@ -123,6 +124,7 @@ target_sources(ReharmStudioTests PRIVATE
     Tests/StateStoreTest.cpp
     Tests/UndoHistoryTest.cpp
     Tests/PlaybackBuilderTest.cpp
+    Tests/VoiceLeadingTest.cpp
     Tests/MidiExporterTest.cpp
     Source/AudioEngine.cpp
     Source/ChordModel.cpp
@@ -130,6 +132,7 @@ target_sources(ReharmStudioTests PRIVATE
     Source/HarmonyAnalyzer.cpp
     Source/StateStore.cpp
     Source/PlaybackBuilder.cpp
+    Source/VoiceLeading.cpp
     Source/MidiExporter.cpp
 )
 

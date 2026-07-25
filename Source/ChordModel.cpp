@@ -592,7 +592,9 @@ std::vector<int> Voicing::midiNotes (const Chord& c, Style style, int octaveBase
     for (int interval : ChordModel::effectiveIntervals (c))
         notes.push_back (rootMidi + interval);
 
-    if (style == Style::Close)
+    // Auto is realised by VoiceLeader (VoiceLeading.h); when it reaches this
+    // static helper it falls back to the plain Close stack.
+    if (style == Style::Close || style == Style::Auto)
     {
         if (c.hasBass())
         {

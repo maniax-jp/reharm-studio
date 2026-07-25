@@ -1,4 +1,5 @@
 #include "PlaybackBuilder.h"
+#include "VoiceLeading.h"
 #include <algorithm>
 #include <cmath>
 
@@ -181,6 +182,11 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
     beats.reserve (flat.size());
     displayIndices.reserve (flat.size());
 
+    // Voice-leading state for the block-chord path only. Constructed per build()
+    // call so that the same (model, settings) always yields identical output
+    // (playback and MIDI export must agree).
+    VoiceLeader leader;
+
     for (int i = 0; i < (int) flat.size(); ++i)
     {
         const auto& fc = flat[(size_t) i];
@@ -188,6 +194,9 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
         if (! fc.chord.has_value())
         {
             // Rest: single engine slot, never subdivided.
+            // Deliberately does not touch `leader`: a rest is silence, not a
+            // harmonic reset, so the next chord still voice-leads from the last
+            // sounding chord.
             notes.emplace_back();
             beats.push_back (fc.beats);
             displayIndices.push_back (i);
@@ -196,8 +205,10 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
 
         if (settings.arpPattern == ArpPattern::Off)
         {
-            // Block chord: the voicing (Close/Open) applies here.
-            auto chordNotes = Voicing::midiNotes (*fc.chord, settings.voicing);
+            // Block chord: the voicing (Close/Open/Auto) applies here.
+            auto chordNotes = (settings.voicing == Voicing::Style::Auto)
+                                  ? leader.next (*fc.chord)
+                                  : Voicing::midiNotes (*fc.chord, settings.voicing);
             if (chordNotes.empty())
             {
                 notes.emplace_back();
@@ -211,11 +222,18 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
             continue;
         }
 
+        // Auto is a block-chord feature and is never offered for arpeggios in the
+        // UI; a hand-edited session could still ask for it, so it is pinned to
+        // Close here to keep the arpeggio path's behaviour fully defined.
+        const auto arpVoicing = (settings.voicing == Voicing::Style::Auto)
+                                    ? Voicing::Style::Close
+                                    : settings.voicing;
+
         // Number of chord tones is decided from the chord itself (independent of
         // voicing and of any explicit bass): DYAD=2, TRIAD/sus/aug/dim=3, else 4+.
         const int chordToneCount = static_cast<int> (ChordModel::effectiveIntervals (*fc.chord).size());
         const bool isSmallChord = (chordToneCount <= 3);
-        const bool openArp = (settings.voicing == Voicing::Style::Open);
+        const bool openArp = (arpVoicing == Voicing::Style::Open);
 
         // Arpeggio note material:
         //  - 4+ note chords: walk the voiced notes as-is, so the Close/Open
@@ -232,7 +250,7 @@ std::shared_ptr<ChordData> PlaybackBuilder::build (const ProgressionModel& model
                                                          : kDefaultOctaveBase;
         auto chordNotes = Voicing::midiNotes (*fc.chord,
                                               isSmallChord ? Voicing::Style::Close
-                                                           : settings.voicing,
+                                                           : arpVoicing,
                                               octaveBase);
 
         if (chordNotes.empty())

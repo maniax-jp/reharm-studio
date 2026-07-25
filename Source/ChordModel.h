@@ -164,13 +164,15 @@ public:
 class Voicing
 {
 public:
-    enum class Style { Close, Open };
+    enum class Style { Close, Open, Auto };
 
     /** Returns MIDI notes (ascending) for the chord.
         Close: root position stacked from the root near octaveBase (default C4 = 60);
                explicit bass (on-chord) is added below the root.
         Open:  drop-2 of the close voicing (second-highest note dropped one octave),
-               plus a bass note one octave below the root (or the explicit bass). */
+               plus a bass note one octave below the root (or the explicit bass).
+        Auto:  realised by VoiceLeader (VoiceLeading.h); when passed to this static
+               helper it falls back to the same result as Close. */
     static std::vector<int> midiNotes (const Chord& c, Style style, int octaveBase = 60);
 };
 

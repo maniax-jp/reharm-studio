@@ -501,6 +501,150 @@ public:
                 expectWithinAbsoluteError (data->beats[(size_t) i], 1.0, 1.0e-9);
             }
         }
+
+        // --- Step 2+3 Auto voicing (VoiceLeading) integration tests ---
+
+        beginTest ("14. Arpeggio path is unaffected by Auto (Auto == Close for all patterns/rates)");
+        {
+            // Auto is pinned to Close on the arpeggio path (PlaybackBuilder.cpp
+            // pins settings.voicing == Auto to Voicing::Style::Close before the
+            // arpeggio branch runs), so build() output must be byte-for-byte
+            // identical to an explicit Close request, for every pattern/rate and
+            // across a chord sequence that changes from bar to bar.
+            ProgressionModel model;
+            model.setNumBars (4);
+            {
+                ProgressionModel::ScopedBulkEdit bulk (model);
+                model.setSubdivision (0, BarSubdivision::One);
+                model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });   // C
+                model.setSubdivision (1, BarSubdivision::One);
+                model.setChord (1, 0, Chord { 5, ChordQuality::Major, -1 });   // F
+                model.setSubdivision (2, BarSubdivision::One);
+                model.setChord (2, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7
+                model.setSubdivision (3, BarSubdivision::One);
+                model.setChord (3, 0, Chord { 0, ChordQuality::Major, -1 });   // C
+            }
+
+            for (auto pattern : { ArpPattern::Up, ArpPattern::Down, ArpPattern::UpDown })
+            {
+                for (auto rate : { ArpRate::Quarter, ArpRate::Eighth, ArpRate::Sixteenth })
+                {
+                    PlaybackSettings autoSettings;
+                    autoSettings.voicing = Voicing::Style::Auto;
+                    autoSettings.arpPattern = pattern;
+                    autoSettings.arpRate = rate;
+
+                    PlaybackSettings closeSettings;
+                    closeSettings.voicing = Voicing::Style::Close;
+                    closeSettings.arpPattern = pattern;
+                    closeSettings.arpRate = rate;
+
+                    auto autoData = PlaybackBuilder::build (model, autoSettings);
+                    auto closeData = PlaybackBuilder::build (model, closeSettings);
+
+                    expectEquals (autoData->totalChords, closeData->totalChords);
+                    for (int i = 0; i < autoData->totalChords; ++i)
+                    {
+                        expect (autoData->notes[(size_t) i] == closeData->notes[(size_t) i]);
+                        expectWithinAbsoluteError (autoData->beats[(size_t) i],
+                                                    closeData->beats[(size_t) i], 1.0e-9);
+                        expectEquals (autoData->displayIndices[(size_t) i],
+                                      closeData->displayIndices[(size_t) i]);
+                    }
+                }
+            }
+        }
+
+        beginTest ("15. Block + Auto: I-IV-V-I matches the fixed spec expectation");
+        {
+            ProgressionModel model;
+            model.setNumBars (4);
+            {
+                ProgressionModel::ScopedBulkEdit bulk (model);
+                model.setSubdivision (0, BarSubdivision::One);
+                model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+                model.setSubdivision (1, BarSubdivision::One);
+                model.setChord (1, 0, Chord { 5, ChordQuality::Major, -1 }); // F
+                model.setSubdivision (2, BarSubdivision::One);
+                model.setChord (2, 0, Chord { 7, ChordQuality::Major, -1 }); // G
+                model.setSubdivision (3, BarSubdivision::One);
+                model.setChord (3, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+            }
+
+            PlaybackSettings settings;
+            settings.voicing = Voicing::Style::Auto;
+            settings.arpPattern = ArpPattern::Off;
+
+            auto data = PlaybackBuilder::build (model, settings);
+
+            expectEquals (data->totalChords, 4);
+            const std::vector<std::vector<int>> expected {
+                { 60, 64, 67 }, { 60, 65, 69 }, { 59, 62, 67 }, { 60, 64, 67 }
+            };
+            for (int i = 0; i < 4; ++i)
+            {
+                expect (data->notes[(size_t) i] == expected[(size_t) i]);
+                expectWithinAbsoluteError (data->beats[(size_t) i], 4.0, 1.0e-9);
+                expectEquals (data->displayIndices[(size_t) i], i);
+            }
+        }
+
+        beginTest ("16. Block + Auto: a rest slot does not reset voice-leading state");
+        {
+            // C, rest, F (interior rest, preserved as an empty engine slot).
+            ProgressionModel modelWithRest;
+            modelWithRest.setNumBars (3);
+            {
+                ProgressionModel::ScopedBulkEdit bulk (modelWithRest);
+                modelWithRest.setSubdivision (0, BarSubdivision::One);
+                modelWithRest.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+                modelWithRest.setSubdivision (1, BarSubdivision::One);
+                modelWithRest.setChord (1, 0, std::nullopt);                          // rest
+                modelWithRest.setSubdivision (2, BarSubdivision::One);
+                modelWithRest.setChord (2, 0, Chord { 5, ChordQuality::Major, -1 });  // F
+            }
+
+            // C, F (no rest in between) - the F voicing this should match.
+            ProgressionModel modelNoRest;
+            modelNoRest.setNumBars (2);
+            {
+                ProgressionModel::ScopedBulkEdit bulk (modelNoRest);
+                modelNoRest.setSubdivision (0, BarSubdivision::One);
+                modelNoRest.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+                modelNoRest.setSubdivision (1, BarSubdivision::One);
+                modelNoRest.setChord (1, 0, Chord { 5, ChordQuality::Major, -1 }); // F
+            }
+
+            PlaybackSettings settings;
+            settings.voicing = Voicing::Style::Auto;
+            settings.arpPattern = ArpPattern::Off;
+
+            auto withRestData = PlaybackBuilder::build (modelWithRest, settings);
+            auto noRestData = PlaybackBuilder::build (modelNoRest, settings);
+
+            expectEquals (withRestData->totalChords, 3);
+            expectEquals (noRestData->totalChords, 2);
+
+            // Slot 0: C.
+            expect (withRestData->notes[0] == noRestData->notes[0]);
+            expectEquals (withRestData->displayIndices[0], 0);
+
+            // Slot 1: rest - empty notes, beats preserved, correct display index.
+            expect (withRestData->notes[1].empty());
+            expectWithinAbsoluteError (withRestData->beats[1], 4.0, 1.0e-9);
+            expectEquals (withRestData->displayIndices[1], 1);
+
+            // Slot 2: F - must match the no-rest sequence's F (index 1 there),
+            // proving the rest did not reset the voice-leading state.
+            expect (withRestData->notes[2] == noRestData->notes[1]);
+            expectEquals (withRestData->displayIndices[2], 2);
+        }
+
+        // 17. "Block + Close matches legacy exactly" is covered by the existing
+        // Close-voicing tests above (e.g. "Block mode compatibility..." and the
+        // arpeggio-off Power5 test); Auto is opt-in via settings.voicing, so no
+        // new test is needed here - passing the existing tests unmodified is the
+        // regression check.
     }
 };
 
