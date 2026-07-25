@@ -21,6 +21,7 @@ public:
         int movementWeight = 2;
         int centerWeight = 1;
         int bottomClusterPenalty = 8;         // bottom pair closer than 3 semitones
+        int semitonePenalty = 8;              // any adjacent pair exactly 1 semitone apart
     };
 
     // Two overloads rather than `Options o = {}`: a defaulted argument here would
@@ -39,6 +40,12 @@ public:
     bool hasPrevious() const noexcept;
 
     // --- pure helpers, exposed for unit tests ---
+
+    /** True when the chord's own basic close voicing already has a semitone between
+        adjacent tones -- e.g. Csus4(b5) = {0,5,6} or C6(#5) = {0,4,8,9}. For those
+        chords the clash is part of the chord itself, so the semitone penalty is
+        waived rather than spreading the voicing apart to escape it. */
+    static bool hasInherentSemitone (const Chord& c);
 
     /** Ascending chord tones stacked from the root at octaveBase. No explicit bass. */
     static std::vector<int> closeStack (const Chord& c, int octaveBase = 60);

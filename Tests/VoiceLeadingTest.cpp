@@ -26,6 +26,15 @@ int bidirMovement (const std::vector<int>& a, const std::vector<int>& b)
     for (int y : b) total += minDist (y, a);
     return total;
 }
+
+// True if some adjacent pair in the (ascending) stack is exactly 1 semitone apart.
+bool hasAdjacentSemitone (const std::vector<int>& stack)
+{
+    for (size_t i = 1; i < stack.size(); ++i)
+        if (stack[i] - stack[i - 1] == 1)
+            return true;
+    return false;
+}
 } // namespace
 
 class VoiceLeadingTest : public juce::UnitTest
@@ -299,6 +308,132 @@ public:
 
             const std::vector<int> stack { 60, 64, 67 };
             expectEquals (VoiceLeader::cost (stack, stack, movementOnly), 0);
+        }
+
+        beginTest ("14. hasInherentSemitone classification");
+        {
+            // Chords whose own basic close voicing already contains a semitone.
+            const Chord sus4Flat5 { 0, ChordQuality::Sus4, -1, 0, FifthAlt::Flat, 0 };       // Csus4(b5)
+            const Chord sixthSharp5 { 0, ChordQuality::Sixth, -1, 0, FifthAlt::Sharp, 0 };    // C6(#5)
+            const Chord minor6Sharp5 { 0, ChordQuality::Minor6, -1, 0, FifthAlt::Sharp, 0 };  // Cm6(#5)
+            const Chord sixthSus4Flat5 { 0, ChordQuality::SixthSus4, -1, 0, FifthAlt::Flat, 0 }; // C6sus4(b5)
+
+            expect (VoiceLeader::hasInherentSemitone (sus4Flat5));
+            expect (ChordModel::effectiveIntervals (sus4Flat5) == std::vector<int> ({ 0, 5, 6 }));
+
+            expect (VoiceLeader::hasInherentSemitone (sixthSharp5));
+            expect (ChordModel::effectiveIntervals (sixthSharp5) == std::vector<int> ({ 0, 4, 8, 9 }));
+
+            expect (VoiceLeader::hasInherentSemitone (minor6Sharp5));
+            expect (VoiceLeader::hasInherentSemitone (sixthSus4Flat5));
+
+            // Chords whose basic close voicing does not contain a semitone (inversions
+            // may introduce one, but that is not what hasInherentSemitone answers).
+            const Chord major { 0, ChordQuality::Major, -1 };
+            const Chord major7 { 0, ChordQuality::Major7, -1 };
+            const Chord dom7 { 0, ChordQuality::Dominant7, -1 };
+            const Chord minor7 { 0, ChordQuality::Minor7, -1 };
+            const Chord dim7 { 0, ChordQuality::Diminished7, -1 };
+            const Chord aug7 { 0, ChordQuality::Augmented7, -1 };
+            const Chord augMajor7 { 0, ChordQuality::AugmentedMajor7, -1 };
+            const Chord blk { 0, ChordQuality::Blackadder, -1 };
+            const Chord sus4 { 0, ChordQuality::Sus4, -1 };
+            const Chord sixth { 0, ChordQuality::Sixth, -1 };
+
+            expect (! VoiceLeader::hasInherentSemitone (major));
+            expect (! VoiceLeader::hasInherentSemitone (major7));
+            expect (! VoiceLeader::hasInherentSemitone (dom7));
+            expect (! VoiceLeader::hasInherentSemitone (minor7));
+            expect (! VoiceLeader::hasInherentSemitone (dim7));
+            expect (! VoiceLeader::hasInherentSemitone (aug7));
+            expect (! VoiceLeader::hasInherentSemitone (augMajor7));
+            expect (! VoiceLeader::hasInherentSemitone (blk));
+            expect (! VoiceLeader::hasInherentSemitone (sus4));
+            expect (! VoiceLeader::hasInherentSemitone (sixth));
+        }
+
+        beginTest ("15. Semitone penalty also catches a clash at the top of the stack "
+                   "(the bottom-cluster penalty alone would miss it)");
+        {
+            const std::vector<int> prev { 60, 64, 67 };
+            // CM7 1st-inversion-like stack: diffs 3,4,1 -- the semitone is between the
+            // top two notes (71,72), and the bottom pair (64,67) is a 3rd, so the
+            // existing bottom-cluster penalty does not fire on it.
+            const std::vector<int> candWithClash { 64, 67, 71, 72 };
+            const std::vector<int> candNoClash { 60, 64, 67, 71 }; // diffs 4,3,4 -- no semitone anywhere
+
+            const VoiceLeader::Options defaultOpts;
+            VoiceLeader::Options noPenalty = defaultOpts;
+            noPenalty.semitonePenalty = 0;
+
+            const int withPenalty = VoiceLeader::cost (prev, candWithClash, defaultOpts);
+            const int withoutPenalty = VoiceLeader::cost (prev, candWithClash, noPenalty);
+            expectEquals (withPenalty - withoutPenalty, defaultOpts.semitonePenalty);
+
+            const int noClashWithPenalty = VoiceLeader::cost (prev, candNoClash, defaultOpts);
+            const int noClashWithoutPenalty = VoiceLeader::cost (prev, candNoClash, noPenalty);
+            expectEquals (noClashWithPenalty - noClashWithoutPenalty, 0);
+        }
+
+        beginTest ("16. Semitone avoidance changes the outcome: C -> G -> CM7");
+        {
+            VoiceLeader leader;
+            const Chord C { 0, ChordQuality::Major, -1 };
+            const Chord G { 7, ChordQuality::Major, -1 };
+            const Chord CM7 { 0, ChordQuality::Major7, -1 };
+
+            const auto c1 = leader.next (C);
+            const auto g1 = leader.next (G);
+            const auto cm7 = leader.next (CM7);
+
+            expect (c1 == std::vector<int> ({ 60, 64, 67 }));
+            expect (g1 == std::vector<int> ({ 59, 62, 67 }));
+            expect (cm7 == std::vector<int> ({ 60, 64, 67, 71 }));
+            // Without the semitone penalty, {59,60,64,67} (cost 19) narrowly beats
+            // {60,64,67,71} (cost 20); the penalty (8, applied once) flips that to 27
+            // vs 20, so this specifically exercises the new rule rather than being
+            // incidental.
+            expect (cm7 != std::vector<int> ({ 59, 60, 64, 67 }));
+        }
+
+        beginTest ("17. Exempt chords keep their inherent semitone; non-exempt chords avoid it "
+                   "even under an extreme penalty");
+        {
+            VoiceLeader::Options extreme;
+            extreme.semitonePenalty = 1000;
+
+            // Exempt: Csus4(b5)'s own close voicing already contains a semitone, so the
+            // penalty is waived for it. If the wiring were wrong (penalty not waived),
+            // an extreme penalty would push the result to a semitone-free rotation.
+            {
+                VoiceLeader leader (extreme);
+                const Chord C { 0, ChordQuality::Major, -1 };
+                const Chord sus4Flat5 { 0, ChordQuality::Sus4, -1, 0, FifthAlt::Flat, 0 };
+
+                leader.next (C);
+                const auto result = leader.next (sus4Flat5);
+                expect (hasAdjacentSemitone (result));
+            }
+
+            // Non-exempt (contrast): CM7's own close voicing has no semitone, so the
+            // extreme penalty applies in full and pins the result to the root-position
+            // close voicing (the only rotation with no adjacent semitone).
+            {
+                VoiceLeader leader (extreme);
+                const Chord B { 11, ChordQuality::Major, -1 };
+                const Chord CM7 { 0, ChordQuality::Major7, -1 };
+
+                leader.next (B);
+                const auto result = leader.next (CM7);
+                expect (! hasAdjacentSemitone (result));
+                expect (result == std::vector<int> ({ 60, 64, 67, 71 }));
+            }
+        }
+
+        beginTest ("18. Default semitonePenalty regression");
+        {
+            const VoiceLeader::Options defaultOpts;
+            expectEquals (defaultOpts.semitonePenalty, 8);
         }
     }
 };

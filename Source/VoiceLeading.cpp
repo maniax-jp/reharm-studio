@@ -57,6 +57,15 @@ bool VoiceLeader::hasPrevious() const noexcept
     return prevStack.has_value();
 }
 
+bool VoiceLeader::hasInherentSemitone (const Chord& c)
+{
+    const auto ivals = ChordModel::effectiveIntervals (c);
+    for (size_t i = 1; i < ivals.size(); ++i)
+        if (ivals[i] - ivals[i - 1] == 1)
+            return true;
+    return false;
+}
+
 std::vector<int> VoiceLeader::closeStack (const Chord& c, int octaveBase)
 {
     const int rootPc = normalizePc (c.rootPitchClass);
@@ -159,6 +168,17 @@ int VoiceLeader::cost (const std::vector<int>& prevStack,
     if (candStack.size() >= 2 && candStack[1] - candStack[0] < 3)
         result += o.bottomClusterPenalty;
 
+    // Avoid a minor 2nd between adjacent voices: the algorithm should not create a
+    // half-step clash the chord itself did not ask for. Counted per occurrence, and
+    // deliberately a penalty rather than a hard veto -- every inversion of a maj7
+    // contains one, so vetoing would pin those chords to root position forever and
+    // destroy the voice leading. A large movement saving can still outweigh it.
+    // Note: exactly 1 semitone only. A minor 9th (13) between adjacent voices is a
+    // normal open sonority and is not penalised.
+    for (size_t i = 1; i < candStack.size(); ++i)
+        if (candStack[i] - candStack[i - 1] == 1)
+            result += o.semitonePenalty;
+
     return result;
 }
 
@@ -173,16 +193,23 @@ std::vector<int> VoiceLeader::next (const Chord& c)
         return Voicing::midiNotes (c, Voicing::Style::Close);
     }
 
-    const auto cands = candidates (c, opts);
+    // Chords whose own close voicing already contains a semitone (Csus4(b5),
+    // C6(#5), ...) are exempt: penalising them would only push the voicing apart
+    // to escape an interval that defines the chord.
+    Options searchOpts = opts;
+    if (hasInherentSemitone (c))
+        searchOpts.semitonePenalty = 0;
+
+    const auto cands = candidates (c, searchOpts);
     if (cands.empty())
         return Voicing::midiNotes (c, Voicing::Style::Close);
 
     size_t bestIdx = 0;
-    int bestCost = cost (*prevStack, cands[0], opts);
+    int bestCost = cost (*prevStack, cands[0], searchOpts);
 
     for (size_t i = 1; i < cands.size(); ++i)
     {
-        const int cCost = cost (*prevStack, cands[i], opts);
+        const int cCost = cost (*prevStack, cands[i], searchOpts);
         if (cCost < bestCost
             || (cCost == bestCost && vectorLess (cands[i], cands[bestIdx])))
         {
@@ -194,6 +221,10 @@ std::vector<int> VoiceLeader::next (const Chord& c)
     auto stack = cands[bestIdx];
     prevStack = stack;
 
+    // The explicit (slash-chord) bass is excluded from the search/cost entirely and
+    // placed below the lowest stack note here: it is a semitone-agnostic insertion,
+    // not a candidate the penalty evaluates, so a user-specified C/B is never
+    // second-guessed by this rule.
     if (c.hasBass())
     {
         const int low = stack[0];
