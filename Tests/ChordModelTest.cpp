@@ -1,5 +1,7 @@
 #include <JuceHeader.h>
 #include "../Source/ChordModel.h"
+#include <algorithm>
+#include <set>
 #include <vector>
 
 using namespace reharm;
@@ -280,6 +282,44 @@ public:
             // close={60,64,67,71}; drop second-highest (67) -> 55; bass 48; sort
             const auto notes = Voicing::midiNotes ({ 0, ChordQuality::Major7 }, Voicing::Style::Open, 60);
             expect (notes == std::vector<int> ({ 48, 55, 60, 64, 71 }));
+        }
+
+        beginTest ("Voicing Open C/E has no duplicate notes");
+        {
+            // close={60,64,67}; size<=3 so drop index1 -> {60,52,67}; explicit bass E lands on
+            // the same MIDI note (52) as the dropped voice, so it must be collapsed.
+            const auto notes = Voicing::midiNotes ({ 0, ChordQuality::Major, 4 }, Voicing::Style::Open, 60);
+            expect (notes == std::vector<int> ({ 52, 60, 67 }));
+            expect (std::adjacent_find (notes.begin(), notes.end()) == notes.end());
+            expectEquals (notes.front() % 12, 4);
+
+            std::set<int> pcs;
+            for (int n : notes)
+                pcs.insert (n % 12);
+
+            const auto chordTones = ChordModel::chordTonePitchClasses ({ 0, ChordQuality::Major, 4 });
+            std::set<int> expectedPcs (chordTones.begin(), chordTones.end());
+            expectedPcs.insert (4);
+            expect (pcs == expectedPcs);
+        }
+
+        beginTest ("Voicing Open CM7/G has no duplicate notes");
+        {
+            // close={60,64,67,71}; drop second-highest (67) -> 55; explicit bass G also lands on
+            // 55, so it must be collapsed.
+            const auto notes = Voicing::midiNotes ({ 0, ChordQuality::Major7, 7 }, Voicing::Style::Open, 60);
+            expect (notes == std::vector<int> ({ 55, 60, 64, 71 }));
+            expect (std::adjacent_find (notes.begin(), notes.end()) == notes.end());
+            expectEquals (notes.front() % 12, 7);
+
+            std::set<int> pcs;
+            for (int n : notes)
+                pcs.insert (n % 12);
+
+            const auto chordTones = ChordModel::chordTonePitchClasses ({ 0, ChordQuality::Major7, 7 });
+            std::set<int> expectedPcs (chordTones.begin(), chordTones.end());
+            expectedPcs.insert (7);
+            expect (pcs == expectedPcs);
         }
 
         beginTest ("pitchClassName normalizes negative input");

@@ -625,6 +625,12 @@ std::vector<int> Voicing::midiNotes (const Chord& c, Style style, int octaveBase
     notes.push_back (bass);
 
     std::sort (notes.begin(), notes.end());
+
+    // An explicit bass can land on the same MIDI note as the dropped voice
+    // (e.g. C/E: drop-2 moves E down to 52 and the bass E is also 52), which
+    // would emit the note twice. Collapse duplicates.
+    notes.erase (std::unique (notes.begin(), notes.end()), notes.end());
+
     return notes;
 }
 
