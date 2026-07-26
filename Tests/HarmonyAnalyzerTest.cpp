@@ -858,6 +858,96 @@ public:
             expect (found, "Pop Punk should be detected in G minor key");
         }
 
+        // ---- Pop Punk rotations ----------------------------------------------
+        // The loop is the pattern, so all four entry points count: I-V-vi-IV,
+        // V-vi-IV-I, vi-IV-I-V and IV-I-V-vi.
+
+        beginTest ("detectPatterns: Pop Punk is detected from any of its four bars");
+        {
+            // C = 0, G = 7, Am = 9, F = 5
+            struct Rotation { const char* label; std::array<Chord, 4> chords; };
+            const std::array<Rotation, 4> rotations { {
+                { "I-V-vi-IV", { Chord { 0, ChordQuality::Major, -1 }, Chord { 7, ChordQuality::Major, -1 },
+                                 Chord { 9, ChordQuality::Minor, -1 }, Chord { 5, ChordQuality::Major, -1 } } },
+                { "V-vi-IV-I", { Chord { 7, ChordQuality::Major, -1 }, Chord { 9, ChordQuality::Minor, -1 },
+                                 Chord { 5, ChordQuality::Major, -1 }, Chord { 0, ChordQuality::Major, -1 } } },
+                { "vi-IV-I-V", { Chord { 9, ChordQuality::Minor, -1 }, Chord { 5, ChordQuality::Major, -1 },
+                                 Chord { 0, ChordQuality::Major, -1 }, Chord { 7, ChordQuality::Major, -1 } } },
+                { "IV-I-V-vi", { Chord { 5, ChordQuality::Major, -1 }, Chord { 0, ChordQuality::Major, -1 },
+                                 Chord { 7, ChordQuality::Major, -1 }, Chord { 9, ChordQuality::Minor, -1 } } }
+            } };
+
+            for (const auto& rotation : rotations)
+            {
+                ProgressionModel model;
+                model.setKey (cMajor);
+                model.setNumBars (4);
+                for (int bar = 0; bar < 4; ++bar)
+                    model.setChord (bar, 0, rotation.chords [static_cast<size_t> (bar)]);
+
+                const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+                int matches = 0;
+                for (const auto& p : patterns)
+                {
+                    if (p.name != "Pop Punk (I-V-vi-IV)")
+                        continue;
+                    ++matches;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 3);
+                }
+
+                expectEquals (matches, 1, juce::String ("Pop Punk ") + rotation.label
+                                              + " should be reported exactly once");
+            }
+        }
+
+        beginTest ("detectPatterns: repeated Pop Punk loop reports one match per turn");
+        {
+            // | C G Am F | C G Am F |: the rotations must not turn one loop into
+            // an overlapping match at every bar.
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (8);
+            const std::array<Chord, 4> loop { Chord { 0, ChordQuality::Major, -1 },
+                                              Chord { 7, ChordQuality::Major, -1 },
+                                              Chord { 9, ChordQuality::Minor, -1 },
+                                              Chord { 5, ChordQuality::Major, -1 } };
+            for (int bar = 0; bar < 8; ++bar)
+                model.setChord (bar, 0, loop [static_cast<size_t> (bar % 4)]);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            std::vector<int> starts;
+            for (const auto& p : patterns)
+                if (p.name == "Pop Punk (I-V-vi-IV)")
+                    starts.push_back (p.startIndex);
+
+            expect (starts == std::vector<int> { 0, 4 });
+        }
+
+        beginTest ("detectPatterns: Komuro is not swallowed by a Pop Punk rotation");
+        {
+            // vi-IV-V-I is a different cycle from vi-IV-I-V.
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Minor, -1 }); // Am
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major, -1 }); // F
+            model.setChord (2, 0, Chord { 7, ChordQuality::Major, -1 }); // G
+            model.setChord (3, 0, Chord { 0, ChordQuality::Major, -1 }); // C
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool komuro = false;
+            bool popPunk = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Komuro (vi-IV-V-I)")      komuro = true;
+                if (p.name == "Pop Punk (I-V-vi-IV)")    popPunk = true;
+            }
+
+            expect (komuro, "Komuro should still be detected");
+            expect (! popPunk, "vi-IV-V-I is not a Pop Punk rotation");
+        }
+
         // ---- Confirmation ----------------------------------------------------
         // | C | Bm7b5 E7 | Am7 | Gm7 C7 | F |. Two of its bars carry a chord pair,
         // but matching only looks at the chord run, so the bar layout is free.

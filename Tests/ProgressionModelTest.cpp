@@ -511,6 +511,44 @@ public:
             expect (b2.has_value());
             expectEquals (b2->bassPitchClass, 10);
         }
+
+        beginTest ("detectionForms: rotating preset yields every entry point, canonical first");
+        {
+            const auto& presets = ProgressionPresets::all();
+            const auto& popPunk = presets [2];
+            expect (popPunk.detectRotations);
+
+            const auto forms = ProgressionPresets::detectionForms (popPunk);
+            expectEquals ((int) forms.size(), (int) popPunk.entries.size());
+
+            const int numEntries = (int) popPunk.entries.size();
+            for (int offset = 0; offset < numEntries; ++offset)
+            {
+                expect (forms [(size_t) offset].name == popPunk.name);
+                expectEquals ((int) forms [(size_t) offset].entries.size(), numEntries);
+
+                for (int i = 0; i < numEntries; ++i)
+                {
+                    const auto& rotated = forms [(size_t) offset].entries [(size_t) i].canonical().chords;
+                    const auto& source = popPunk.entries [(size_t) ((offset + i) % numEntries)]
+                                             .canonical().chords;
+                    expectEquals ((int) rotated.size(), (int) source.size());
+                    expectEquals (rotated.front().degreeSemitone, source.front().degreeSemitone);
+                    expect (rotated.front().quality == source.front().quality);
+                }
+            }
+        }
+
+        beginTest ("detectionForms: a preset without rotation detection stays single");
+        {
+            const auto& presets = ProgressionPresets::all();
+            const auto& royalRoad = presets [0];
+            expect (! royalRoad.detectRotations);
+
+            const auto forms = ProgressionPresets::detectionForms (royalRoad);
+            expectEquals ((int) forms.size(), 1);
+            expect (forms.front().name == royalRoad.name);
+        }
     }
 };
 

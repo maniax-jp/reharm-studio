@@ -1111,17 +1111,41 @@ std::vector<DetectedPattern> HarmonyAnalyzer::detectPatterns (const ProgressionM
         const auto& presets = ProgressionPresets::all();
         for (const auto& preset : presets)
         {
-            for (int s = 0; s < static_cast<int> (real.size()); ++s)
+            // A rotation-detected preset matches its own loop at several starting
+            // points, so a found occurrence consumes its chords: scanning resumes
+            // after it instead of reporting the same loop once per rotation.
+            const auto forms = ProgressionPresets::detectionForms (preset);
+
+            int s = 0;
+            while (s < static_cast<int> (real.size()))
             {
                 int endPos = 0;
-                if (! presetMatchesFrom (preset, 0, real, s, key, endPos))
+                bool matched = false;
+
+                // Canonical form first, so an occurrence that starts on the
+                // preset's own first bar is the one that gets reported.
+                for (const auto& form : forms)
+                {
+                    if (presetMatchesFrom (form, 0, real, s, key, endPos))
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (! matched)
+                {
+                    ++s;
                     continue;
+                }
 
                 patterns.push_back ({
                     preset.name,
                     real[static_cast<size_t> (s)].flatIndex,
                     real[static_cast<size_t> (endPos - 1)].flatIndex
                 });
+
+                s = endPos;
             }
         }
     }

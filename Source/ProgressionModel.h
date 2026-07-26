@@ -219,6 +219,12 @@ struct PresetProgression
 
     juce::String name;                 // e.g. Japanese name of the progression
     std::vector<Entry> entries;        // one entry per bar
+
+    /** When true, pattern detection also accepts the progression started from any
+        of its bars (its cyclic rotations), because the loop is recognised by the
+        cycle rather than by where it happens to begin. The canonical rotation is
+        still the only thing applyToModel writes and the picker shows. */
+    bool detectRotations = false;
 };
 
 /** Built-in famous progressions selectable from the UI. */
@@ -234,6 +240,12 @@ public:
         entry, subdivided to fit the bar's chords, numBars = entries.size(). Key is
         left unchanged; chord roots are transposed to the model's current key tonic. */
     static void applyToModel (const PresetProgression& preset, ProgressionModel& model);
+
+    /** Every form pattern detection should accept for this preset, canonical
+        first: just the preset itself, or all of its cyclic rotations when it sets
+        detectRotations. Every form keeps the preset's name, so a match is
+        reported as the same progression wherever the loop was entered. */
+    static std::vector<PresetProgression> detectionForms (const PresetProgression& preset);
 };
 
 } // namespace reharm

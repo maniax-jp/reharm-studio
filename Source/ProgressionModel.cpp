@@ -231,13 +231,16 @@ const std::vector<PresetProgression>& ProgressionPresets::all()
               {7, ChordQuality::Major}
           }
         },
+        // Detected from any of its four bars: V-vi-IV-I, vi-IV-I-V and IV-I-V-vi
+        // are the same loop entered at a different point, and songs use all four.
         { "Pop Punk (I-V-vi-IV)",
           {
               {0, ChordQuality::Major},
               {7, ChordQuality::Major},
               {9, ChordQuality::Minor},
               {5, ChordQuality::Major}
-          }
+          },
+          true
         },
         { "Komuro (vi-IV-V-I)",
           {
@@ -391,6 +394,31 @@ void ProgressionPresets::applyToModel (const PresetProgression& preset, Progress
             model.setChord (bar, static_cast<int> (s), Chord {root, spec.quality, bass});
         }
     }
+}
+
+std::vector<PresetProgression> ProgressionPresets::detectionForms (const PresetProgression& preset)
+{
+    const size_t numEntries = preset.entries.size();
+
+    if (! preset.detectRotations || numEntries < 2)
+        return { preset };
+
+    std::vector<PresetProgression> forms;
+    forms.reserve (numEntries);
+
+    for (size_t offset = 0; offset < numEntries; ++offset)
+    {
+        PresetProgression form;
+        form.name = preset.name;
+        form.entries.reserve (numEntries);
+
+        for (size_t i = 0; i < numEntries; ++i)
+            form.entries.push_back (preset.entries [(offset + i) % numEntries]);
+
+        forms.push_back (std::move (form));
+    }
+
+    return forms;
 }
 
 } // namespace reharm
