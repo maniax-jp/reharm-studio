@@ -32,6 +32,10 @@ public:
         juce::String pluginStateB64;       // Base64; empty = no state
         ArpPattern arpPattern = ArpPattern::Off;
         ArpRate arpRate = ArpRate::Eighth;
+        // Live MIDI input device. The name is kept alongside the identifier so
+        // the device can still be found after the OS re-issues identifiers.
+        juce::String midiInputId;          // empty = MIDI input off
+        juce::String midiInputName;
     };
 
     // ---- Pure serialization (static, unit-test target) ----

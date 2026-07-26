@@ -26,6 +26,7 @@ public:
     std::function<void (const juce::String& name)> onUserPresetSelected;
     std::function<void (const juce::String& name)> onUserPresetDeleteRequested;
     std::function<void()> onSaveRequested;
+    std::function<void()> onSettingsRequested;
 
     void paint (juce::Graphics& g) override;
     void resized() override;
@@ -35,6 +36,7 @@ private:
     juce::ComboBox scaleBox;
     ComboButton presetButton;
     ComboButton saveButton;
+    GearButton settingsButton;
     juce::StringArray userPresetNames;
     juce::String pendingDeleteName;
 

@@ -158,7 +158,9 @@ void ReharmLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& 
 {
     label.setBounds (8, 1, juce::jmax (1, box.getWidth() - 28), box.getHeight() - 2);
     label.setFont (getComboBoxFont (box));
-    label.setColour (juce::Label::textColourId, theme::text);
+    // Honour the box's own colour (defaulted to theme::text in the constructor)
+    // so a caller can dim a single ComboBox without it being reset on layout.
+    label.setColour (juce::Label::textColourId, box.findColour (juce::ComboBox::textColourId));
 }
 
 void ReharmLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
@@ -295,6 +297,60 @@ juce::Font ReharmLookAndFeel::getTextButtonFont (juce::TextButton&, int /*button
 juce::Font ReharmLookAndFeel::getPopupMenuFont()
 {
     return theme::font (13.0f);
+}
+
+//==============================================================================
+GearButton::GearButton()
+    : juce::Button ("Settings")
+{
+}
+
+void GearButton::paintButton (juce::Graphics& g,
+                              bool shouldDrawButtonAsHighlighted,
+                              bool shouldDrawButtonAsDown)
+{
+    auto bounds = getLocalBounds().toFloat().reduced (0.5f);
+    const bool active = shouldDrawButtonAsHighlighted || shouldDrawButtonAsDown;
+
+    // Same rounded fill/outline as drawButtonBackground, so the gear sits inside
+    // a button that matches the controls beside it instead of floating bare.
+    // The fill stays opaque: the gear's centre hole is punched with this colour.
+    const auto fill = shouldDrawButtonAsDown ? theme::surfaceHi.overlaidWith (theme::accentSoft)
+                                             : (shouldDrawButtonAsHighlighted ? theme::surfaceHi.brighter (0.15f)
+                                                                              : theme::surfaceHi);
+    g.setColour (fill);
+    g.fillRoundedRectangle (bounds, 8.0f);
+    g.setColour (hasKeyboardFocus (true) ? theme::accent : theme::border);
+    g.drawRoundedRectangle (bounds, 8.0f, 1.0f);
+
+    const auto centre = bounds.getCentre();
+    const float radius = juce::jmin (bounds.getWidth(), bounds.getHeight()) * 0.5f - 5.0f;
+    if (radius <= 0.0f)
+        return;
+
+    // Solid body plus eight blunt teeth: at this size a stroked outline reads as
+    // a sun rather than a gear.
+    juce::Path gear;
+    const float bodyRadius = radius * 0.66f;
+    gear.addEllipse (juce::Rectangle<float> (bodyRadius * 2.0f, bodyRadius * 2.0f).withCentre (centre));
+
+    const float toothWidth = radius * 0.38f;
+    for (int i = 0; i < 8; ++i)
+    {
+        juce::Path tooth;
+        tooth.addRoundedRectangle (-toothWidth * 0.5f, -radius, toothWidth, radius, toothWidth * 0.3f);
+        tooth.applyTransform (juce::AffineTransform::rotation (juce::MathConstants<float>::twoPi
+                                                                   * (float) i / 8.0f)
+                                  .translated (centre.x, centre.y));
+        gear.addPath (tooth);
+    }
+
+    g.setColour (active ? theme::text : theme::textDim);
+    g.fillPath (gear);
+
+    const float holeRadius = radius * 0.3f;
+    g.setColour (fill);
+    g.fillEllipse (juce::Rectangle<float> (holeRadius * 2.0f, holeRadius * 2.0f).withCentre (centre));
 }
 
 //==============================================================================

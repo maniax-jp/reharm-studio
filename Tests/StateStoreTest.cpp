@@ -56,6 +56,8 @@ public:
             s.pluginPath = "/Library/Audio/Plug-Ins/VST3/Test.vst3";
             s.pluginName = "Test Plugin";
             s.pluginStateB64 = "QUJDRA=="; // "ABCD"
+            s.midiInputId = "id-keystation";
+            s.midiInputName = "Keystation 49";
             s.arpPattern = ArpPattern::UpDown;
             s.arpRate = ArpRate::Sixteenth;
 
@@ -92,6 +94,8 @@ public:
             expect (s2.pluginStateB64 == s.pluginStateB64);
             expect (s2.arpPattern == s.arpPattern);
             expect (s2.arpRate == s.arpRate);
+            expect (s2.midiInputId == s.midiInputId);
+            expect (s2.midiInputName == s.midiInputName);
         }
 
         beginTest ("arp field: missing/unknown values fall back to Off / 1/8");
@@ -266,6 +270,8 @@ public:
             s.pluginPath = "/some/plugin.vst3";
             s.pluginName = "Some Plugin";
             s.pluginStateB64 = "AAAA";
+            s.midiInputId = "id-keystation";
+            s.midiInputName = "Keystation 49";
 
             const auto v = StateStore::serialize (model, s, true);
 
@@ -273,6 +279,7 @@ public:
             expect (obj != nullptr);
             expect (! obj->hasProperty ("plugin"));
             expect (! obj->hasProperty ("volume"));
+            expect (! obj->hasProperty ("midi"));    // machine-local, like the plugin
             expect (obj->hasProperty ("voicing"));   // written even in musicalOnly mode
 
             ProgressionModel model2;
@@ -282,6 +289,7 @@ public:
             expect (ok);
             expectWithinAbsoluteError (s2.volume, 0.8f, 0.0001f);
             expect (s2.pluginPath.isEmpty());
+            expect (s2.midiInputId.isEmpty());
         }
 
         beginTest ("musicalOnly: Auto voicing survives a user-preset save/load round trip");

@@ -79,6 +79,8 @@ target_sources(ReharmStudio PRIVATE
     Source/AnalysisStrip.cpp
     Source/ChordEditorPanel.cpp
     Source/TransportBar.cpp
+    Source/SettingsPanel.cpp
+    Source/MidiInputRouter.cpp
     Source/StateStore.cpp
     Source/PlaybackBuilder.cpp
     Source/VoiceLeading.cpp
@@ -127,7 +129,9 @@ target_sources(ReharmStudioTests PRIVATE
     Tests/PlaybackBuilderTest.cpp
     Tests/VoiceLeadingTest.cpp
     Tests/MidiExporterTest.cpp
+    Tests/MidiInputRouterTest.cpp
     Source/AudioEngine.cpp
+    Source/MidiInputRouter.cpp
     Source/ChordModel.cpp
     Source/ProgressionModel.cpp
     Source/HarmonyAnalyzer.cpp

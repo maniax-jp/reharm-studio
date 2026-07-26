@@ -14,6 +14,8 @@
 #include "StateStore.h"
 #include "UndoHistory.h"
 #include "PlaybackBuilder.h"
+#include "MidiInputRouter.h"
+#include "SettingsPanel.h"
 
 class PluginEditorWindow : public juce::DocumentWindow
 {
@@ -116,10 +118,17 @@ private:
     void performCut();
     void performDeleteSelection();
     void showAboutDialog();
+    void showSettingsDialog();
+    /** Opens (or, with an empty identifier, closes) the live MIDI input and
+        remembers the choice in the session. */
+    void applyMidiInputDevice (const juce::String& identifier, const juce::String& name);
+    /** Opens the MIDI input stored in the session, if it is connected. */
+    void reopenSavedMidiInput();
     void unloadPlugin();
 
     std::unique_ptr<ReharmLookAndFeel> lookAndFeel;
     std::unique_ptr<AudioEngine> audioEngine;
+    reharm::MidiInputRouter midiInput;
 
     juce::ApplicationCommandManager commandManager;
    #if JUCE_MAC
@@ -154,6 +163,7 @@ private:
     TransportBar transportBar;
 
     std::unique_ptr<PluginEditorWindow> editorWindow;
+    juce::Component::SafePointer<juce::DialogWindow> settingsWindow;
 
     static constexpr int kHeaderH = 56;
     static constexpr int kAnalysisH = 40;

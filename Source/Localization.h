@@ -103,6 +103,11 @@ inline juce::String tr (const juce::String& key)
         { "Delete...",           "\xE5\x89\x8A\xE9\x99\xA4..." },                                                                                            // 削除...
         { "Delete Preset",       "\xE3\x83\x97\xE3\x83\xAA\xE3\x82\xBB\xE3\x83\x83\xE3\x83\x88\xE3\x81\xAE\xE5\x89\x8A\xE9\x99\xA4" },                      // プリセットの削除
 
+        // Settings screen (gear button in the header)
+        { "Settings",            "\xE8\xA8\xAD\xE5\xAE\x9A" },                                                                                              // 設定
+        { "MIDI Input",          "MIDI" "\xE5\x85\xA5\xE5\x8A\x9B" },                                                                                       // MIDI入力
+        { "No MIDI input",       "\xE4\xBD\xBF\xE7\x94\xA8\xE3\x81\x97\xE3\x81\xAA\xE3\x81\x84" },                                                          // 使用しない
+
         // Menu bar (package C)
         { "Edit",                "\xE7\xB7\xA8\xE9\x9B\x86" },                                                                                              // 編集
         { "Help",                "\xE3\x83\x98\xE3\x83\xAB\xE3\x83\x97" },                                                                                  // ヘルプ

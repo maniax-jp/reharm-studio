@@ -112,6 +112,14 @@ HeaderBar::HeaderBar()
             onSaveRequested();
     };
     addAndMakeVisible (saveButton);
+
+    settingsButton.setTooltip (reharm::loc::tr ("Settings"));
+    settingsButton.onClick = [this]
+    {
+        if (onSettingsRequested)
+            onSettingsRequested();
+    };
+    addAndMakeVisible (settingsButton);
 }
 
 void HeaderBar::setKey (int tonicPitchClass, bool isMajor)
@@ -228,12 +236,16 @@ void HeaderBar::paint (juce::Graphics& g)
 void HeaderBar::resized()
 {
     auto area = getLocalBounds().reduced (16, 12);
-    // Leave room for title on the left
-    area.removeFromLeft (160);
 
     const int comboH = 28;
     const int comboW = 72;
     const int gap = 8;
+
+    // Settings sits at the far right, away from the progression controls.
+    settingsButton.setBounds (area.removeFromRight (comboH).withSizeKeepingCentre (comboH, comboH));
+
+    // Leave room for title on the left
+    area.removeFromLeft (160);
 
     auto placeCombo = [&] (juce::Component& c, int w)
     {

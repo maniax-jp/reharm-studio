@@ -101,6 +101,23 @@ public:
 };
 
 /**
+ * Square icon button painting a gear (opens the settings screen). Drawn as
+ * strokes rather than a glyph so it does not depend on an emoji/symbol font.
+ */
+class GearButton : public juce::Button
+{
+public:
+    GearButton();
+
+    void paintButton (juce::Graphics& g,
+                      bool shouldDrawButtonAsHighlighted,
+                      bool shouldDrawButtonAsDown) override;
+
+private:
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GearButton)
+};
+
+/**
  * Two-segment pill toggle: left | right.
  * Active segment is filled with accent.
  */

@@ -209,6 +209,12 @@ juce::var StateStore::serialize (const ProgressionModel& model, const SessionDat
         pluginObj->setProperty ("name", s.pluginName);
         pluginObj->setProperty ("state", s.pluginStateB64);
         root->setProperty ("plugin", juce::var (pluginObj));
+
+        // Machine-local, like the plugin: never part of a shared progression preset.
+        auto* midiObj = new juce::DynamicObject();
+        midiObj->setProperty ("inputId", s.midiInputId);
+        midiObj->setProperty ("inputName", s.midiInputName);
+        root->setProperty ("midi", juce::var (midiObj));
     }
 
     return juce::var (root);
@@ -322,6 +328,18 @@ bool StateStore::deserialize (const juce::var& v, ProgressionModel& model, Sessi
         s.pluginPath = juce::String();
         s.pluginName = juce::String();
         s.pluginStateB64 = juce::String();
+    }
+
+    const auto midiVar = v.getProperty ("midi", juce::var());
+    if (midiVar.isObject())
+    {
+        s.midiInputId = midiVar.getProperty ("inputId", juce::var()).toString();
+        s.midiInputName = midiVar.getProperty ("inputName", juce::var()).toString();
+    }
+    else
+    {
+        s.midiInputId = juce::String();
+        s.midiInputName = juce::String();
     }
 
     return true;

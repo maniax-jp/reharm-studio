@@ -214,6 +214,61 @@ public:
                     "Fallback synth should produce audio without plugin");
         }
 
+        // Live MIDI input reaches the engine as messages already sitting in the
+        // block's MidiBuffer (MainComponent fills it from MidiInputRouter before
+        // calling processBlock), so the engine must play them and must not drop
+        // them on their way to the plugin.
+        beginTest ("LiveMidiSoundsWhileTransportStopped");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 64, (juce::uint8) 100), 0);
+
+            engine.processBlock (buffer, midi);
+
+            expect (buffer.getMagnitude (0, 0, 512) > 0.0f,
+                    "Incoming MIDI should sound even when the transport is stopped");
+        }
+
+        beginTest ("LiveMidiIsMergedWithSequencedChords");
+        {
+            AudioEngine engine;
+            engine.prepareToPlay (512, 44100.0);
+            engine.setBpm (120);
+
+            auto chordData = std::make_shared<ChordData>();
+            chordData->totalChords = 1;
+            chordData->notes.push_back ({60, 64, 67});
+            chordData->beats.push_back (4.0);
+            chordData->totalBeats = 4.0;
+            chordData->cumBeats = {0.0, 4.0};
+            engine.setChordData (chordData);
+            engine.startPlayback();
+
+            juce::AudioBuffer<float> buffer (2, 512);
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::noteOn (1, 72, (juce::uint8) 100), 0);
+
+            engine.processBlock (buffer, midi);
+
+            bool liveNoteKept = false;
+            bool chordNoteAdded = false;
+            for (const auto meta : midi)
+            {
+                const auto m = meta.getMessage();
+                if (! m.isNoteOn())
+                    continue;
+                if (m.getNoteNumber() == 72) liveNoteKept = true;
+                if (m.getNoteNumber() == 60) chordNoteAdded = true;
+            }
+
+            expect (liveNoteKept, "Live input must survive the engine's own scheduling");
+            expect (chordNoteAdded, "Sequenced chord notes must still be added");
+        }
+
         beginTest ("FallbackSynthSilentWhenStopped");
         {
             AudioEngine engine;

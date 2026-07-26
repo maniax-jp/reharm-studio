@@ -124,6 +124,7 @@ MainComponent::MainComponent()
     };
 
     headerBar.onSaveRequested = [this] { promptSaveUserPreset(); };
+    headerBar.onSettingsRequested = [this] { showSettingsDialog(); };
     headerBar.onUserPresetSelected = [this] (const juce::String& name) { loadUserPreset (name); };
     headerBar.onUserPresetDeleteRequested = [this] (const juce::String& name)
     {
@@ -255,6 +256,11 @@ MainComponent::MainComponent()
     setAudioChannels (0, 2);
     startTimer (50);
 
+    // After setAudioChannels so prepareToPlay has given the collector its sample
+    // rate: messages arriving before that would be dropped.
+    if (restored)
+        reopenSavedMidiInput();
+
     commandManager.registerAllCommandsForTarget (this);
     setApplicationCommandManagerToWatch (&commandManager);
 
@@ -286,6 +292,8 @@ MainComponent::MainComponent()
     }
 
     extraAppleMenu.addItem (reharm::loc::tr ("About Reharm Studio"), [this] { showAboutDialog(); });
+    extraAppleMenu.addSeparator();
+    extraAppleMenu.addItem (reharm::loc::tr ("Settings"), [this] { showSettingsDialog(); });
     juce::MenuBarModel::setMacMainMenu (this, &extraAppleMenu);
    #endif
 
@@ -420,11 +428,16 @@ MainComponent::~MainComponent()
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
     audioEngine->prepareToPlay (samplesPerBlockExpected, sampleRate);
+    midiInput.prepare (sampleRate);
 }
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
 {
     juce::MidiBuffer midiBuffer;
+
+    // Live input first; the engine then adds its sequenced chord events to the
+    // same buffer, so played notes and the progression share the instrument.
+    midiInput.fillNextBlock (midiBuffer, bufferToFill.numSamples);
 
     // Honour startSample/numSamples: process only the requested region.
     juce::AudioBuffer<float> subBuffer (bufferToFill.buffer->getArrayOfWritePointers(),
@@ -980,6 +993,88 @@ bool MainComponent::perform (const InvocationInfo& info)
         default: break;
     }
     return false;
+}
+
+void MainComponent::applyMidiInputDevice (const juce::String& identifier, const juce::String& name)
+{
+    midiInput.setDevice (identifier);
+
+    // What the user picked is stored even if the device failed to open, so the
+    // settings screen can keep showing that choice (greyed out) instead of
+    // silently falling back to "no MIDI input".
+    sessionData.midiInputId = identifier;
+    sessionData.midiInputName = name;
+    markSessionDirty();
+}
+
+void MainComponent::reopenSavedMidiInput()
+{
+    if (sessionData.midiInputId.isEmpty() && sessionData.midiInputName.isEmpty())
+        return;
+
+    if (! midiInput.restoreDevice (sessionData.midiInputId, sessionData.midiInputName))
+        return;   // still unplugged: keep the stored choice so it can be shown
+
+    // A reconnected device may come back under a new identifier.
+    sessionData.midiInputId = midiInput.getDeviceIdentifier();
+    sessionData.midiInputName = midiInput.getDeviceName();
+    markSessionDirty();
+}
+
+void MainComponent::showSettingsDialog()
+{
+    if (settingsWindow != nullptr)
+    {
+        // Two ways in (gear button and the application menu), one window.
+        settingsWindow->toFront (true);
+        return;
+    }
+
+    auto* content = new SettingsPanel();
+    content->setSize (380, 100);
+    content->setLookAndFeel (&getLookAndFeel());
+
+    // The dialog is not modal and outlives this call, so both the poll timer and
+    // the selection callback must survive this component going away.
+    juce::Component::SafePointer<MainComponent> safeThis (this);
+    juce::Component::SafePointer<SettingsPanel> safePanel (content);
+
+    auto refresh = [safeThis, safePanel]
+    {
+        if (safeThis == nullptr || safePanel == nullptr)
+            return;
+
+        // Opening the screen, and every poll after it, is also when a device
+        // that was unplugged gets picked up again, so what the list shows and
+        // what is actually open agree.
+        safeThis->reopenSavedMidiInput();
+
+        safePanel->setMidiInputs (reharm::MidiInputRouter::availableDevices(),
+                                  safeThis->midiInput.getDeviceIdentifier(),
+                                  safeThis->sessionData.midiInputName);
+    };
+
+    content->onRefreshRequested = refresh;
+    content->onMidiInputSelected = [safeThis, refresh] (const juce::String& identifier,
+                                                        const juce::String& name)
+    {
+        if (safeThis == nullptr)
+            return;
+        safeThis->applyMidiInputDevice (identifier, name);
+        refresh();
+    };
+
+    refresh();
+
+    juce::DialogWindow::LaunchOptions options;
+    options.dialogTitle = reharm::loc::tr ("Settings");
+    options.dialogBackgroundColour = theme::surface;
+    options.content.setOwned (content);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+
+    settingsWindow = options.launchAsync();
 }
 
 void MainComponent::showAboutDialog()
