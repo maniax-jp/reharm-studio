@@ -39,6 +39,10 @@ inline juce::String tr (const juce::String& key)
         { "Marunouchi (IVM7-III7-vim7-I7)",       "\xE4\xB8\xB8\xE3\x82\xB5\xE9\x80\xB2\xE8\xA1\x8C" },                                                     // 丸サ進行
         { "Autumn Leaves (ii-V-I-IV-vii-III7-vi)","\xE6\x9E\xAF\xE8\x91\x89\xE9\x80\xB2\xE8\xA1\x8C" },                                                     // 枯葉進行
         { "Fly Me to the Moon (vi-ii-V-I-IV-vii-III7-vi)", "Fly Me to the Moon" },
+        { "Confirmation (I-viim7b5-III7-vim7-iim7-V7-IV)", "\xE3\x82\xB3\xE3\x83\xB3\xE3\x83\x95\xE3\x82\xA1\xE3\x83\xA1\xE3\x83\xBC\xE3\x82\xB7\xE3\x83\xA7\xE3\x83\xB3\xE9\x80\xB2\xE8\xA1\x8C" }, // コンファメーション進行
+        { "Only One (I-IV-V-III-vim7)",           "\xE3\x82\xAA\xE3\x83\xB3\xE3\x83\xAA\xE3\x83\xBC\xE3\x83\xAF\xE3\x83\xB3\xE9\x80\xB2\xE8\xA1\x8C" },                                             // オンリーワン進行
+        { "Ochiba (I-iii-biiidim-VI7-iim-Iaug-IV-V)", "\xE8\x90\xBD\xE3\x81\xA1\xE8\x91\x89\xE9\x80\xB2\xE8\xA1\x8C" },                                                                              // 落ち葉進行
+        { "Champs-Elysees (I-III7-vim-I7)",       "\xE3\x82\xB7\xE3\x83\xA3\xE3\x83\xB3\xE3\x82\xBC\xE3\x83\xAA\xE3\x82\xBC\xE9\x80\xB2\xE8\xA1\x8C" },                                             // シャンゼリゼ進行
 
         // Non-diatonic technique labels (ChordAnalysis::label prefixes)
         { "Picardy",             "\xE3\x83\x94\xE3\x82\xAB\xE3\x83\xAB\xE3\x83\x87\xE3\x82\xA3\xE7\xB5\x82\xE6\xAD\xA2" },                                  // ピカルディ終止

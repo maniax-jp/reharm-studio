@@ -149,6 +149,22 @@ bool qualityMatchesPreset (ChordQuality actual, ChordQuality expected) noexcept
     return false;
 }
 
+bool isAugmentedQuality (ChordQuality q) noexcept
+{
+    return q == ChordQuality::Augmented
+        || q == ChordQuality::Augmented7
+        || q == ChordQuality::AugmentedMajor7;
+}
+
+// Bass degree relative to the preset reference tonic, using the sounding bass
+// (the slash note when there is one). Only wildcard slots consult this: every
+// other slot ignores the bass, so inversions always match.
+int presetBassOffset (const Chord& c, const KeyContext& key) noexcept
+{
+    const int ref = key.isMajor ? key.tonicPitchClass : (key.tonicPitchClass + 3) % 12;
+    return normalizePc (bassAnchorPitchClass (c) - ref);
+}
+
 struct RealChord
 {
     int flatIndex = 0;
@@ -167,6 +183,72 @@ std::vector<RealChord> collectRealChords (const std::vector<FlatChord>& flat)
     }
 
     return real;
+}
+
+// Does one accepted shape of a preset bar match the chords starting at `pos`?
+// On success `consumed` says how many chords it took.
+bool alternativeMatches (const PresetProgression::Alternative& alt,
+                         const std::vector<RealChord>& real,
+                         int pos,
+                         const KeyContext& key,
+                         int& consumed)
+{
+    const int n = alt.length();
+    if (pos + n > static_cast<int> (real.size()))
+        return false;
+
+    if (alt.wildcard == PresetProgression::Wildcard::AnyNonAugmentedOverBass)
+    {
+        const auto& chord = real[static_cast<size_t> (pos)].chord;
+        if (presetBassOffset (chord, key) != alt.wildcardBassDegree
+            || isAugmentedQuality (chord.quality))
+            return false;
+
+        consumed = 1;
+        return true;
+    }
+
+    for (int k = 0; k < n; ++k)
+    {
+        const auto& chord = real[static_cast<size_t> (pos + k)].chord;
+        const auto& spec = alt.chords[static_cast<size_t> (k)];
+
+        if (presetRootOffset (chord, key) != spec.degreeSemitone
+            || ! qualityMatchesPreset (chord.quality, spec.quality))
+            return false;
+    }
+
+    consumed = n;
+    return true;
+}
+
+// Matches a preset's remaining bars against the chords from `pos` on. Bars can
+// consume a variable number of chords, so alternatives are tried with
+// backtracking. On success `endPos` is one past the last chord consumed.
+bool presetMatchesFrom (const PresetProgression& preset,
+                        size_t entryIndex,
+                        const std::vector<RealChord>& real,
+                        int pos,
+                        const KeyContext& key,
+                        int& endPos)
+{
+    if (entryIndex == preset.entries.size())
+    {
+        endPos = pos;
+        return true;
+    }
+
+    for (const auto& alt : preset.entries[entryIndex].alternatives)
+    {
+        int consumed = 0;
+        if (! alternativeMatches (alt, real, pos, key, consumed))
+            continue;
+
+        if (presetMatchesFrom (preset, entryIndex + 1, real, pos + consumed, key, endPos))
+            return true;
+    }
+
+    return false;
 }
 
 bool fitsScale (const Chord& c, int tonic, const int* intervals, int count)
@@ -1029,30 +1111,17 @@ std::vector<DetectedPattern> HarmonyAnalyzer::detectPatterns (const ProgressionM
         const auto& presets = ProgressionPresets::all();
         for (const auto& preset : presets)
         {
-            const int n = static_cast<int> (preset.entries.size());
-            for (int s = 0; s + n <= static_cast<int> (real.size()); ++s)
+            for (int s = 0; s < static_cast<int> (real.size()); ++s)
             {
-                bool match = true;
-                for (int k = 0; k < n; ++k)
-                {
-                    const auto& chord = real[static_cast<size_t> (s + k)].chord;
-                    const auto& entry = preset.entries[static_cast<size_t> (k)];
-                    if (presetRootOffset (chord, key) != entry.degreeSemitone
-                        || ! qualityMatchesPreset (chord.quality, entry.quality))
-                    {
-                        match = false;
-                        break;
-                    }
-                }
+                int endPos = 0;
+                if (! presetMatchesFrom (preset, 0, real, s, key, endPos))
+                    continue;
 
-                if (match)
-                {
-                    patterns.push_back ({
-                        preset.name,
-                        real[static_cast<size_t> (s)].flatIndex,
-                        real[static_cast<size_t> (s + n - 1)].flatIndex
-                    });
-                }
+                patterns.push_back ({
+                    preset.name,
+                    real[static_cast<size_t> (s)].flatIndex,
+                    real[static_cast<size_t> (endPos - 1)].flatIndex
+                });
             }
         }
     }

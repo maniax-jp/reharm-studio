@@ -220,7 +220,7 @@ public:
         beginTest ("Presets: all() size and entry counts");
         {
             const auto& presets = ProgressionPresets::all();
-            expectEquals ((int) presets.size(), 7);
+            expectEquals ((int) presets.size(), 11);
             expectEquals ((int) presets [0].entries.size(), 4); // Royal Road
             expectEquals ((int) presets [1].entries.size(), 8); // Canon
             expectEquals ((int) presets [2].entries.size(), 4); // Pop Punk
@@ -228,6 +228,10 @@ public:
             expectEquals ((int) presets [4].entries.size(), 4); // Marunouchi
             expectEquals ((int) presets [5].entries.size(), 8); // Autumn Leaves
             expectEquals ((int) presets [6].entries.size(), 8); // Fly Me to the Moon
+            expectEquals ((int) presets [7].entries.size(), 5); // Confirmation
+            expectEquals ((int) presets [8].entries.size(), 5); // Only One
+            expectEquals ((int) presets [9].entries.size(), 8); // Ochiba
+            expectEquals ((int) presets [10].entries.size(), 4); // Champs-Elysees
         }
 
         beginTest ("applyToModel: Royal Road in C major");
@@ -362,6 +366,150 @@ public:
             expect (c6.has_value());
             expectEquals (c6->rootPitchClass, 4);
             expectEquals ((int) c6->quality, (int) ChordQuality::Dominant7);
+        }
+
+        beginTest ("applyToModel: Confirmation splits the ii-V bars in half");
+        {
+            ProgressionModel model;
+            model.setKey ({0, true}); // C major
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [7], model);
+
+            // | C | Bm7b5 E7 | Am7 | Gm7 C7 | F |
+            expectEquals (model.getNumBars(), 5);
+            expectEquals ((int) model.getSubdivision (0), (int) BarSubdivision::One);
+            expectEquals ((int) model.getSubdivision (1), (int) BarSubdivision::Two);
+            expectEquals ((int) model.getSubdivision (3), (int) BarSubdivision::Two);
+
+            auto b1s0 = model.getChord (1, 0);
+            expect (b1s0.has_value());
+            expectEquals (b1s0->rootPitchClass, 11);
+            expectEquals ((int) b1s0->quality, (int) ChordQuality::Minor7Flat5);
+
+            auto b1s1 = model.getChord (1, 1);
+            expect (b1s1.has_value());
+            expectEquals (b1s1->rootPitchClass, 4);
+            expectEquals ((int) b1s1->quality, (int) ChordQuality::Dominant7);
+
+            auto b3s0 = model.getChord (3, 0);
+            expect (b3s0.has_value());
+            expectEquals (b3s0->rootPitchClass, 7);
+            expectEquals ((int) b3s0->quality, (int) ChordQuality::Minor7);
+
+            auto b3s1 = model.getChord (3, 1);
+            expect (b3s1.has_value());
+            expectEquals (b3s1->rootPitchClass, 0);
+            expectEquals ((int) b3s1->quality, (int) ChordQuality::Dominant7);
+
+            auto b4 = model.getChord (4, 0);
+            expect (b4.has_value());
+            expectEquals (b4->rootPitchClass, 5);
+            expectEquals ((int) b4->quality, (int) ChordQuality::Major);
+        }
+
+        beginTest ("applyToModel: Only One writes the canonical III triad");
+        {
+            ProgressionModel model;
+            model.setKey ({0, true}); // C major
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [8], model);
+
+            // | C | F | G | E | Am7 | - the Abdim alternative is for matching only.
+            expectEquals (model.getNumBars(), 5);
+
+            auto b3 = model.getChord (3, 0);
+            expect (b3.has_value());
+            expectEquals (b3->rootPitchClass, 4);
+            expectEquals ((int) b3->quality, (int) ChordQuality::Major);
+
+            auto b4 = model.getChord (4, 0);
+            expect (b4.has_value());
+            expectEquals (b4->rootPitchClass, 9);
+            expectEquals ((int) b4->quality, (int) ChordQuality::Minor7);
+        }
+
+        beginTest ("applyToModel: Ochiba carries its slash basses");
+        {
+            ProgressionModel model;
+            model.setKey ({0, true}); // C major
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [9], model);
+
+            // | C | Em/B | Edim/Bb | A7 | Dm | C#aug | F/C | G |
+            expectEquals (model.getNumBars(), 8);
+
+            auto b1 = model.getChord (1, 0);
+            expect (b1.has_value());
+            expectEquals (b1->rootPitchClass, 4);
+            expectEquals ((int) b1->quality, (int) ChordQuality::Minor);
+            expectEquals (b1->bassPitchClass, 11);
+
+            auto b2 = model.getChord (2, 0);
+            expect (b2.has_value());
+            expectEquals (b2->rootPitchClass, 4);
+            expectEquals ((int) b2->quality, (int) ChordQuality::Diminished);
+            expectEquals (b2->bassPitchClass, 10);
+
+            auto b5 = model.getChord (5, 0);
+            expect (b5.has_value());
+            expectEquals (b5->rootPitchClass, 1);
+            expectEquals ((int) b5->quality, (int) ChordQuality::Augmented);
+
+            auto b6 = model.getChord (6, 0);
+            expect (b6.has_value());
+            expectEquals (b6->rootPitchClass, 5);
+            expectEquals (b6->bassPitchClass, 0);
+
+            // The closing V also accepts a dominant 7th, but the triad is canonical.
+            auto b7 = model.getChord (7, 0);
+            expect (b7.has_value());
+            expectEquals (b7->rootPitchClass, 7);
+            expectEquals ((int) b7->quality, (int) ChordQuality::Major);
+        }
+
+        beginTest ("applyToModel: Champs-Elysees keeps bar 4 whole");
+        {
+            ProgressionModel model;
+            model.setKey ({0, true}); // C major
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [10], model);
+
+            // | C | E7/B | Am | C7/G | - the ii-V split is an alternative, not canonical.
+            expectEquals (model.getNumBars(), 4);
+            expectEquals ((int) model.getSubdivision (3), (int) BarSubdivision::One);
+
+            auto b1 = model.getChord (1, 0);
+            expect (b1.has_value());
+            expectEquals (b1->rootPitchClass, 4);
+            expectEquals ((int) b1->quality, (int) ChordQuality::Dominant7);
+            expectEquals (b1->bassPitchClass, 11);
+
+            auto b3 = model.getChord (3, 0);
+            expect (b3.has_value());
+            expectEquals (b3->rootPitchClass, 0);
+            expectEquals ((int) b3->quality, (int) ChordQuality::Dominant7);
+            expectEquals (b3->bassPitchClass, 7);
+        }
+
+        beginTest ("applyToModel: Ochiba in A minor uses the relative major");
+        {
+            ProgressionModel model;
+            model.setKey ({9, false}); // A minor -> reference tonic C
+
+            const auto& presets = ProgressionPresets::all();
+            ProgressionPresets::applyToModel (presets [9], model);
+
+            auto b0 = model.getChord (0, 0);
+            expect (b0.has_value());
+            expectEquals (b0->rootPitchClass, 0);
+
+            auto b2 = model.getChord (2, 0);
+            expect (b2.has_value());
+            expectEquals (b2->bassPitchClass, 10);
         }
     }
 };

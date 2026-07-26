@@ -203,6 +203,12 @@ void ProgressionModel::notifyChanged()
 
 const std::vector<PresetProgression>& ProgressionPresets::all()
 {
+    // Short names to keep the preset table below readable. A bar written as a
+    // plain {degree, quality} is a single chord with no alternatives.
+    using Alt   = PresetProgression::Alternative;
+    using Alts  = std::vector<PresetProgression::Alternative>;
+    using Specs = std::vector<PresetProgression::ChordSpec>;
+
     static const std::vector<PresetProgression> presets =
     {
         { "Royal Road (IV-V-iii-vi)",
@@ -272,6 +278,85 @@ const std::vector<PresetProgression>& ProgressionPresets::all()
               {4, ChordQuality::Dominant7},
               {9, ChordQuality::Minor7}
           }
+        },
+        // | C | Bm7b5 E7 | Am7 | Gm7 C7 | F |
+        // Two bars carry a ii-V pair, so those entries hold a two-chord run.
+        { "Confirmation (I-viim7b5-III7-vim7-iim7-V7-IV)",
+          {
+              {0, ChordQuality::Major},
+              { Alts {
+                  Alt { Specs {
+                      {11, ChordQuality::Minor7Flat5},
+                      {4,  ChordQuality::Dominant7}
+                  } }
+              } },
+              {9, ChordQuality::Minor7},
+              { Alts {
+                  Alt { Specs {
+                      {7, ChordQuality::Minor7},
+                      {0, ChordQuality::Dominant7}
+                  } }
+              } },
+              {5, ChordQuality::Major}
+          }
+        },
+        // | C | F | G | E | Am7 |, where the III may be a plain triad, a dominant
+        // 7th, or the bVIdim that substitutes for it.
+        { "Only One (I-IV-V-III-vim7)",
+          {
+              {0, ChordQuality::Major},
+              {5, ChordQuality::Major},
+              {7, ChordQuality::Major},
+              { Alts {
+                  Alt {4, ChordQuality::Major},
+                  Alt {4, ChordQuality::Dominant7},
+                  Alt {8, ChordQuality::Diminished}
+              } },
+              {9, ChordQuality::Minor7}
+          }
+        },
+        // | C | Em/B | Edim/Bb | A7 | Dm | C#aug | F/C | G |
+        // The descending bass is the point, so bar 3 accepts any inversion of the
+        // Edim as well as anything else sitting on that bb3 bass - except an
+        // augmented chord, which breaks the line. The closing V may be a triad or
+        // a dominant 7th.
+        { "Ochiba (I-iii-biiidim-VI7-iim-Iaug-IV-V)",
+          {
+              {0, ChordQuality::Major},
+              { Alts { Alt {4, ChordQuality::Minor, 11} } },
+              { Alts {
+                  Alt {4, ChordQuality::Diminished, 10},
+                  Alt {PresetProgression::Wildcard::AnyNonAugmentedOverBass, 10}
+              } },
+              {9, ChordQuality::Dominant7},
+              {2, ChordQuality::Minor},
+              {1, ChordQuality::Augmented},
+              { Alts { Alt {5, ChordQuality::Major, 0} } },
+              { Alts {
+                  Alt {7, ChordQuality::Major},
+                  Alt {7, ChordQuality::Dominant7}
+              } }
+          }
+        },
+        // | C | E7/B | Am | C7/G |, where bar 2 may instead run the cliche line
+        // through an augmented chord, and bar 4 may split into its own ii-V.
+        { "Champs-Elysees (I-III7-vim-I7)",
+          {
+              {0, ChordQuality::Major},
+              { Alts {
+                  Alt {4, ChordQuality::Dominant7, 11},
+                  Alt {0, ChordQuality::Augmented},
+                  Alt {4, ChordQuality::Augmented}
+              } },
+              {9, ChordQuality::Minor},
+              { Alts {
+                  Alt {0, ChordQuality::Dominant7, 7},
+                  Alt { Specs {
+                      {7, ChordQuality::Minor7},
+                      {0, ChordQuality::Dominant7}
+                  } }
+              } }
+          }
         }
     };
     return presets;
@@ -289,11 +374,22 @@ void ProgressionPresets::applyToModel (const PresetProgression& preset, Progress
 
     for (size_t i = 0; i < preset.entries.size(); ++i)
     {
-        const auto& e = preset.entries [i];
-        const int root = (tonic + e.degreeSemitone) % 12;
+        const auto& chords = preset.entries [i].canonical().chords;
+        const int bar = static_cast<int> (i);
 
-        model.setSubdivision (static_cast<int> (i), BarSubdivision::One);
-        model.setChord (static_cast<int> (i), 0, Chord {root, e.quality, -1});
+        // A bar carrying two chords is written as a half-bar split; presets never
+        // use more than that, so anything else stays a single whole-bar chord.
+        model.setSubdivision (bar, chords.size() == 2 ? BarSubdivision::Two
+                                                     : BarSubdivision::One);
+
+        for (size_t s = 0; s < chords.size() && s < 2; ++s)
+        {
+            const auto& spec = chords [s];
+            const int root = (tonic + spec.degreeSemitone) % 12;
+            const int bass = spec.bassDegree >= 0 ? (tonic + spec.bassDegree) % 12 : -1;
+
+            model.setChord (bar, static_cast<int> (s), Chord {root, spec.quality, bass});
+        }
     }
 }
 

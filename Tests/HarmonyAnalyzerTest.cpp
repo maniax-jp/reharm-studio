@@ -858,6 +858,337 @@ public:
             expect (found, "Pop Punk should be detected in G minor key");
         }
 
+        // ---- Confirmation ----------------------------------------------------
+        // | C | Bm7b5 E7 | Am7 | Gm7 C7 | F |. Two of its bars carry a chord pair,
+        // but matching only looks at the chord run, so the bar layout is free.
+
+        beginTest ("detectPatterns: Confirmation preset match");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (5);
+            model.setChord (0, 0, Chord { 0,  ChordQuality::Major,       -1 }); // C
+            model.setSubdivision (1, BarSubdivision::Two);
+            model.setChord (1, 0, Chord { 11, ChordQuality::Minor7Flat5, -1 }); // Bm7b5
+            model.setChord (1, 1, Chord { 4,  ChordQuality::Dominant7,   -1 }); // E7
+            model.setChord (2, 0, Chord { 9,  ChordQuality::Minor7,      -1 }); // Am7
+            model.setSubdivision (3, BarSubdivision::Two);
+            model.setChord (3, 0, Chord { 7,  ChordQuality::Minor7,      -1 }); // Gm7
+            model.setChord (3, 1, Chord { 0,  ChordQuality::Dominant7,   -1 }); // C7
+            model.setChord (4, 0, Chord { 5,  ChordQuality::Major,       -1 }); // F
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+                if (p.name == "Confirmation (I-viim7b5-III7-vim7-iim7-V7-IV)")
+                    found = true;
+
+            expect (found, "Confirmation should be detected in its canonical bar layout");
+        }
+
+        beginTest ("detectPatterns: Confirmation ignores bar boundaries");
+        {
+            // The same seven chords, one per bar. Matching must not care.
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (7);
+            model.setChord (0, 0, Chord { 0,  ChordQuality::Major,       -1 });
+            model.setChord (1, 0, Chord { 11, ChordQuality::Minor7Flat5, -1 });
+            model.setChord (2, 0, Chord { 4,  ChordQuality::Dominant7,   -1 });
+            model.setChord (3, 0, Chord { 9,  ChordQuality::Minor7,      -1 });
+            model.setChord (4, 0, Chord { 7,  ChordQuality::Minor7,      -1 });
+            model.setChord (5, 0, Chord { 0,  ChordQuality::Dominant7,   -1 });
+            model.setChord (6, 0, Chord { 5,  ChordQuality::Major,       -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Confirmation (I-viim7b5-III7-vim7-iim7-V7-IV)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 6);
+                }
+            }
+            expect (found, "Confirmation should match regardless of how bars are split");
+        }
+
+        // ---- Only One --------------------------------------------------------
+        // | C | F | G | E | Am7 |, where the III slot also accepts E7 or Abdim.
+
+        beginTest ("detectPatterns: Only One preset match (III as triad)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (5);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,  -1 }); // C
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,  -1 }); // F
+            model.setChord (2, 0, Chord { 7, ChordQuality::Major,  -1 }); // G
+            model.setChord (3, 0, Chord { 4, ChordQuality::Major,  -1 }); // E
+            model.setChord (4, 0, Chord { 9, ChordQuality::Minor7, -1 }); // Am7
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Only One (I-IV-V-III-vim7)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 4);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("detectPatterns: Only One III slot as E7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (5);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,     -1 });
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,     -1 });
+            model.setChord (2, 0, Chord { 7, ChordQuality::Major,     -1 });
+            model.setChord (3, 0, Chord { 4, ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (4, 0, Chord { 9, ChordQuality::Minor7,    -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+                if (p.name == "Only One (I-IV-V-III-vim7)")
+                    found = true;
+
+            expect (found, "Only One should accept a dominant 7th on the III slot");
+        }
+
+        beginTest ("detectPatterns: Only One III slot as Abdim substitute");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (5);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,       -1 });
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,       -1 });
+            model.setChord (2, 0, Chord { 7, ChordQuality::Major,       -1 });
+            model.setChord (3, 0, Chord { 8, ChordQuality::Diminished,  -1 }); // Abdim
+            model.setChord (4, 0, Chord { 9, ChordQuality::Minor7,      -1 });
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+                if (p.name == "Only One (I-IV-V-III-vim7)")
+                    found = true;
+
+            expect (found, "Only One should accept Abdim in place of the III chord");
+        }
+
+        // ---- Ochiba ----------------------------------------------------------
+        // | C | Em/B | Edim/Bb | A7 | Dm | C#aug | F/C | G |. Bar 3 accepts any
+        // inversion of Edim, plus anything non-augmented sitting on the Bb bass.
+
+        // Fills every bar but bar 2, which the caller sets to the shape under test.
+        auto buildOchiba = [] (ProgressionModel& m, Chord barTwo)
+        {
+            m.setNumBars (8);
+            m.setChord (0, 0, Chord { 0, ChordQuality::Major,      -1 }); // C
+            m.setChord (1, 0, Chord { 4, ChordQuality::Minor,      11 }); // Em/B
+            m.setChord (2, 0, barTwo);
+            m.setChord (3, 0, Chord { 9, ChordQuality::Dominant7,  -1 }); // A7
+            m.setChord (4, 0, Chord { 2, ChordQuality::Minor,      -1 }); // Dm
+            m.setChord (5, 0, Chord { 1, ChordQuality::Augmented,  -1 }); // C#aug
+            m.setChord (6, 0, Chord { 5, ChordQuality::Major,       0 }); // F/C
+            m.setChord (7, 0, Chord { 7, ChordQuality::Major,      -1 }); // G
+        };
+
+        auto ochibaDetected = [&] (Chord barTwo)
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            buildOchiba (model, barTwo);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            for (const auto& p : patterns)
+                if (p.name == "Ochiba (I-iii-biiidim-VI7-iim-Iaug-IV-V)")
+                    return true;
+            return false;
+        };
+
+        beginTest ("detectPatterns: Ochiba preset match");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            buildOchiba (model, Chord { 4, ChordQuality::Diminished, 10 }); // Edim/Bb
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Ochiba (I-iii-biiidim-VI7-iim-Iaug-IV-V)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 7);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("detectPatterns: Ochiba bar 3 accepts any Edim inversion");
+        {
+            expect (ochibaDetected (Chord { 4, ChordQuality::Diminished, -1 }),
+                    "root-position Edim should match");
+            expect (ochibaDetected (Chord { 4, ChordQuality::Diminished,  7 }),
+                    "Edim/G should match");
+        }
+
+        beginTest ("detectPatterns: Ochiba bar 3 accepts other chords over the Bb bass");
+        {
+            expect (ochibaDetected (Chord { 10, ChordQuality::Major,   -1 }), "Bb");
+            expect (ochibaDetected (Chord { 10, ChordQuality::Minor,   -1 }), "Bbm");
+            expect (ochibaDetected (Chord { 10, ChordQuality::Sus2,    -1 }), "Bbsus2");
+            expect (ochibaDetected (Chord { 10, ChordQuality::Sus4,    -1 }), "Bbsus4");
+            expect (ochibaDetected (Chord { 10, ChordQuality::Diminished, -1 }), "Bbdim");
+            expect (ochibaDetected (Chord { 10, ChordQuality::Major7,  -1 }), "BbM7");
+            expect (ochibaDetected (Chord { 7,  ChordQuality::Minor,   10 }), "Gm/Bb");
+            expect (ochibaDetected (Chord { 0,  ChordQuality::Major,   10 }), "C/Bb");
+            expect (ochibaDetected (Chord { 9,  ChordQuality::Minor7,  10 }), "Am7/Bb");
+        }
+
+        beginTest ("detectPatterns: Ochiba bar 3 rejects augmented chords");
+        {
+            expect (! ochibaDetected (Chord { 10, ChordQuality::Augmented,       -1 }),
+                    "Bbaug breaks the descending line and must not match");
+            expect (! ochibaDetected (Chord { 10, ChordQuality::Augmented7,      -1 }),
+                    "Bbaug7 must not match");
+            expect (! ochibaDetected (Chord { 10, ChordQuality::AugmentedMajor7, -1 }),
+                    "BbaugM7 must not match");
+            expect (! ochibaDetected (Chord { 1,  ChordQuality::Augmented,       10 }),
+                    "C#aug/Bb must not match");
+        }
+
+        beginTest ("detectPatterns: Ochiba bar 3 rejects a bass off the line");
+        {
+            expect (! ochibaDetected (Chord { 7, ChordQuality::Minor, -1 }),
+                    "Gm sits on neither the Edim shape nor the Bb bass");
+        }
+
+        beginTest ("detectPatterns: Ochiba tolerates inversions elsewhere");
+        {
+            // Em/B written as a plain Em: slash bases never constrain matching.
+            ProgressionModel model;
+            model.setKey (cMajor);
+            buildOchiba (model, Chord { 4, ChordQuality::Diminished, 10 });
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor, -1 }); // Em
+            model.setChord (6, 0, Chord { 5, ChordQuality::Major, -1 }); // F
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+                if (p.name == "Ochiba (I-iii-biiidim-VI7-iim-Iaug-IV-V)")
+                    found = true;
+
+            expect (found, "Ochiba should match with the slash bases left off");
+        }
+
+        beginTest ("detectPatterns: Ochiba closing V as a dominant 7th");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            buildOchiba (model, Chord { 4, ChordQuality::Diminished, 10 });
+            model.setChord (7, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Ochiba (I-iii-biiidim-VI7-iim-Iaug-IV-V)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 7);
+                }
+            }
+            expect (found, "Ochiba should accept G7 on its closing V");
+        }
+
+        // ---- Champs-Elysees --------------------------------------------------
+        // | C | E7/B | Am | C7/G |, with an augmented cliche allowed in bar 2 and
+        // a ii-V split allowed in bar 4.
+
+        beginTest ("detectPatterns: Champs-Elysees preset match");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,     -1 }); // C
+            model.setChord (1, 0, Chord { 4, ChordQuality::Dominant7, 11 }); // E7/B
+            model.setChord (2, 0, Chord { 9, ChordQuality::Minor,     -1 }); // Am
+            model.setChord (3, 0, Chord { 0, ChordQuality::Dominant7,  7 }); // C7/G
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Champs-Elysees (I-III7-vim-I7)")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("detectPatterns: Champs-Elysees bar 2 as an augmented cliche");
+        {
+            auto detectedWithBarTwo = [&] (Chord barTwo)
+            {
+                ProgressionModel model;
+                model.setKey (cMajor);
+                model.setNumBars (4);
+                model.setChord (0, 0, Chord { 0, ChordQuality::Major,     -1 });
+                model.setChord (1, 0, barTwo);
+                model.setChord (2, 0, Chord { 9, ChordQuality::Minor,     -1 });
+                model.setChord (3, 0, Chord { 0, ChordQuality::Dominant7,  7 });
+
+                const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+                for (const auto& p : patterns)
+                    if (p.name == "Champs-Elysees (I-III7-vim-I7)")
+                        return true;
+                return false;
+            };
+
+            expect (detectedWithBarTwo (Chord { 0, ChordQuality::Augmented, -1 }), "Caug");
+            expect (detectedWithBarTwo (Chord { 4, ChordQuality::Augmented, -1 }), "Eaug");
+        }
+
+        beginTest ("detectPatterns: Champs-Elysees bar 4 split into a ii-V");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,     -1 }); // C
+            model.setChord (1, 0, Chord { 4, ChordQuality::Dominant7, 11 }); // E7/B
+            model.setChord (2, 0, Chord { 9, ChordQuality::Minor,     -1 }); // Am
+            model.setSubdivision (3, BarSubdivision::Two);
+            model.setChord (3, 0, Chord { 7, ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (3, 1, Chord { 0, ChordQuality::Dominant7, -1 }); // C7
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "Champs-Elysees (I-III7-vim-I7)")
+                {
+                    found = true;
+                    // Five chords now, so the match runs one slot further.
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 4);
+                }
+            }
+            expect (found, "Champs-Elysees should accept Gm7 C7 in place of C7/G");
+        }
+
         beginTest ("SusDominant: E7 -> Em7/A -> CM7 in C major (functional root reinterpretation)");
         {
             // E7's plain root offset from C is 4 (not 2), so this does not collide

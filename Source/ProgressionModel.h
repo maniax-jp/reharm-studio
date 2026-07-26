@@ -128,17 +128,97 @@ bool operator!= (const ProgressionState& a, const ProgressionState& b) noexcept;
 bool operator== (const KeyContext& a, const KeyContext& b) noexcept;
 bool operator!= (const KeyContext& a, const KeyContext& b) noexcept;
 
-/** A named preset progression, expressed relative to the tonic of a major key. */
+/**
+ * A named preset progression, expressed relative to the tonic of a major key.
+ *
+ * Three levels, from the inside out:
+ *   ChordSpec   - one chord: degree + quality (+ an optional bass for playback).
+ *   Alternative - one accepted shape of a slot: a run of one or more ChordSpecs,
+ *                 or a Wildcard predicate.
+ *   Entry       - one bar's slot: the set of shapes accepted there. The first
+ *                 alternative is the canonical form and is what applyToModel writes.
+ *
+ * Slash bases are for playback only: matching ignores the bass everywhere, so
+ * any inversion of a slot's chord is accepted. Where a preset genuinely allows a
+ * different chord over a given bass (Ochiba's bar 3), that is spelled out as a
+ * Wildcard alternative rather than as a constraint on the canonical form.
+ */
 struct PresetProgression
 {
-    struct Entry
+    /** One chord of a preset. */
+    struct ChordSpec
     {
         int degreeSemitone = 0;        // semitones above the tonic (0..11)
         ChordQuality quality = ChordQuality::Major;
+        int bassDegree = -1;           // playback only; -1 = no slash bass
+    };
+
+    /** Predicate alternatives, for slots too loose to enumerate. */
+    enum class Wildcard
+    {
+        None = 0,
+        /** Any chord voiced over the given bass degree, except augmented ones. */
+        AnyNonAugmentedOverBass
+    };
+
+    /** One accepted shape of a slot. */
+    struct Alternative
+    {
+        std::vector<ChordSpec> chords;  // usually one; more for a subdivided bar
+        Wildcard wildcard = Wildcard::None;
+        int wildcardBassDegree = -1;    // semitones above the tonic, when wildcard is set
+
+        Alternative() = default;
+
+        /** A single chord, the common case. */
+        Alternative (int degreeSemitone,
+                     ChordQuality quality,
+                     int bassDegree = -1)
+            : chords { ChordSpec { degreeSemitone, quality, bassDegree } }
+        {
+        }
+
+        Alternative (std::vector<ChordSpec> chordRun)
+            : chords (std::move (chordRun))
+        {
+        }
+
+        Alternative (Wildcard w, int bassDegree)
+            : wildcard (w), wildcardBassDegree (bassDegree)
+        {
+        }
+
+        /** How many chords this shape consumes when matching. */
+        int length() const noexcept
+        {
+            return wildcard != Wildcard::None ? 1 : static_cast<int> (chords.size());
+        }
+    };
+
+    /** One bar of a preset: every shape accepted there, canonical form first. */
+    struct Entry
+    {
+        std::vector<Alternative> alternatives;
+
+        Entry() = default;
+
+        /** Lets a plain `{degree, quality}` stand for a single-chord bar. */
+        Entry (int degreeSemitone, ChordQuality quality)
+            : alternatives { Alternative { degreeSemitone, quality } }
+        {
+        }
+
+        Entry (std::vector<Alternative> alts)
+            : alternatives (std::move (alts))
+        {
+        }
+
+        /** The canonical form: what applyToModel writes into the model. */
+        const Alternative& canonical() const { return alternatives.front(); }
     };
 
     juce::String name;                 // e.g. Japanese name of the progression
-    std::vector<Entry> entries;        // one entry per bar (subdivision One)
+    std::vector<Entry> entries;        // one entry per bar
 };
 
 /** Built-in famous progressions selectable from the UI. */
@@ -146,12 +226,13 @@ class ProgressionPresets
 {
 public:
     /** All presets in display order:
-        Royal Road (Ohdou), Canon, Pop-Punk, Komuro, Marusa, Autumn Leaves (Kareha). */
+        Royal Road (Ohdou), Canon, Pop-Punk, Komuro, Marusa, Autumn Leaves (Kareha),
+        Fly Me to the Moon, Confirmation, Only One, Ochiba, Champs-Elysees. */
     static const std::vector<PresetProgression>& all();
 
-    /** Replaces the model's content with the preset: one chord per bar,
-        subdivision One, numBars = entries.size(). Key is left unchanged;
-        chord roots are transposed to the model's current key tonic. */
+    /** Replaces the model's content with the preset's canonical form: one bar per
+        entry, subdivided to fit the bar's chords, numBars = entries.size(). Key is
+        left unchanged; chord roots are transposed to the model's current key tonic. */
     static void applyToModel (const PresetProgression& preset, ProgressionModel& model);
 };
 
