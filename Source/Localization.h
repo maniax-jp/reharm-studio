@@ -108,6 +108,10 @@ inline juce::String tr (const juce::String& key)
         { "MIDI Input",          "MIDI" "\xE5\x85\xA5\xE5\x8A\x9B" },                                                                                       // MIDI入力
         { "No MIDI input",       "\xE4\xBD\xBF\xE7\x94\xA8\xE3\x81\x97\xE3\x81\xAA\xE3\x81\x84" },                                                          // 使用しない
 
+        // Plugin button context menu (right-click on Load VST3 / the plugin name)
+        { "Load plugin...",      "\xE3\x83\x97\xE3\x83\xA9\xE3\x82\xB0\xE3\x82\xA4\xE3\x83\xB3\xE3\x82\x92\xE8\xAA\xAD\xE3\x81\xBF\xE8\xBE\xBC\xE3\x82\x80..." }, // プラグインを読み込む...
+        { "Built-in synth",      "\xE5\x86\x85\xE8\x94\xB5\xE9\x9F\xB3\xE6\xBA\x90" },                                                                      // 内蔵音源
+
         // Menu bar (package C)
         { "Edit",                "\xE7\xB7\xA8\xE9\x9B\x86" },                                                                                              // 編集
         { "Help",                "\xE3\x83\x98\xE3\x83\xAB\xE3\x83\x97" },                                                                                  // ヘルプ
@@ -122,8 +126,9 @@ inline juce::String tr (const juce::String& key)
         { "Version",             "\xE3\x83\x90\xE3\x83\xBC\xE3\x82\xB8\xE3\x83\xA7\xE3\x83\xB3" },                                                          // バージョン
 
         // Deliberately absent from this table (displayed in English, so they need no entry):
-        //  - "Load VST3" / "Unload VST3": a matched pair of opposite actions. The Japanese
-        //    rendering ("VST3を読み込む") is clumsy and longer without being clearer.
+        //  - "Load VST3": the plugin button's empty-state label. The Japanese rendering
+        //    ("VST3を読み込む") is clumsy and longer without being clearer; the button's
+        //    context menu spells the same action out in Japanese ("Load plugin...").
         //  - "OK": universally understood as-is in Japanese UI.
         // These are written as plain literals at their call sites; an identity mapping here
         // would only be dead weight.

@@ -3,6 +3,7 @@
 #include <juce_core/juce_core.h>
 #include "ProgressionModel.h"
 #include "PlaybackSettings.h"
+#include "RecentPlugins.h"
 
 namespace reharm
 {
@@ -30,6 +31,7 @@ public:
         juce::String pluginPath;           // empty = no plugin
         juce::String pluginName;
         juce::String pluginStateB64;       // Base64; empty = no state
+        RecentPluginList recentPlugins;    // most recent first, max maxRecentPlugins
         ArpPattern arpPattern = ArpPattern::Off;
         ArpRate arpRate = ArpRate::Eighth;
         // Live MIDI input device. The name is kept alongside the identifier so

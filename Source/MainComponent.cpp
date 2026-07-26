@@ -171,6 +171,10 @@ MainComponent::MainComponent()
     transportBar.onLoadPlugin = [this] { loadPlugin(); };
     transportBar.onOpenPluginEditor = [this] { openPluginEditor(); };
     transportBar.onUnloadPlugin = [this] { unloadPlugin(); };
+    transportBar.onRecentPluginSelected = [this] (const juce::String& path)
+    {
+        loadPluginFromFile (juce::File (path), nullptr, false);
+    };
     transportBar.onVoicingChanged = [this] (reharm::Voicing::Style v)
     {
         display.voicingStyle = v;
@@ -225,6 +229,7 @@ MainComponent::MainComponent()
         transportBar.setArpRate (sessionData.arpRate);
         transportBar.setBpm (sessionData.bpm);
         transportBar.setVolume (sessionData.volume);
+        transportBar.setRecentPlugins (sessionData.recentPlugins);
         audioEngine->setBpm (sessionData.bpm);
         audioEngine->setVolume (sessionData.volume);
     }
@@ -847,11 +852,16 @@ void MainComponent::loadPluginFromFile (const juce::File& file,
             audioEngine->loadPluginInstance (std::move (pluginInstance), sampleRate, blockSize);
             debugLog ("Plugin loaded successfully");
 
-            transportBar.setPluginName (pluginName);
+            transportBar.setPlugin (pluginName, file.getFullPathName());
             debugLog ("Plugin loaded UI update: " + pluginName);
 
             sessionData.pluginPath = file.getFullPathName();
             sessionData.pluginName = pluginName;
+            // Also runs on the startup restore, where it simply re-confirms the
+            // entry that is already at the front.
+            sessionData.recentPlugins = reharm::withRecentPlugin (std::move (sessionData.recentPlugins),
+                                                                  file.getFullPathName(), pluginName);
+            transportBar.setRecentPlugins (sessionData.recentPlugins);
             refreshPluginStateCache();
             markSessionDirty();
         }
@@ -886,7 +896,7 @@ void MainComponent::unloadPlugin()
     sessionData.pluginName = {};
     sessionData.pluginStateB64 = {};
 
-    transportBar.setPluginName ({});
+    transportBar.setPlugin ({}, {});
     markSessionDirty();
 }
 

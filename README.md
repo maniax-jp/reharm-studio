@@ -65,8 +65,9 @@ Fly Me to the Moon・コンファメーション進行・オンリーワン進�
 
 ### 自動保存とユーザープリセット
 
-- 進行・キー・BPM・音量・ボイシング・アルペジオ設定・プラグイン(音色状態含む)を
-  自動保存し、次回起動時に自動復元。ファイル操作は不要
+- 進行・キー・BPM・音量・ボイシング・アルペジオ設定・プラグイン(音色状態含む)・
+  MIDI 入力デバイス・最近読み込んだプラグインを自動保存し、次回起動時に自動復元。
+  ファイル操作は不要
 - ヘッダーの「保存」ボタンで現在の進行に名前を付けて保存。
   プリセット選択欄の User セクションからいつでも呼び出せる
 
@@ -78,12 +79,26 @@ Fly Me to the Moon・コンファメーション進行・オンリーワン進�
 ### VST3 ホスト
 
 - VST3 インストゥルメントプラグインの音色でコード進行を再生
+- トランスポート右端のボタン1つで完結。未ロード時は **Load VST3**、
+  ロード後はプラグイン名を表示し、クリックで GUI エディタを開く
+- 同ボタンを右クリックすると「プラグインを読み込む...」「内蔵音源」に加え、
+  過去に読み込んだプラグインを新しい順に最大5件表示し、選び直せる
+
+### MIDI 入力
+
+- 接続した MIDI キーボードの演奏を、ロード中の VST3
+  （未ロード時は内蔵音源）でそのまま鳴らせる
+- 入力デバイスの選択は設定画面から。ヘッダー右端の歯車ボタン、または
+  アプリケーションメニューの「設定」で開く
+- 選択したデバイスは自動保存され、次回起動時に開き直す。
+  取り外している間は選択がグレー表示で残り、挿し直すと自動で復帰する
 
 ## 使用方法
 
 1. アプリケーションを起動する
 2. **Load VST3** ボタンで VST3 プラグイン（`.vst3`）を選択する
-3. プラグイン名ボタンをクリックすると、プラグインの GUI エディタが開く
+   （右クリックで過去に読み込んだプラグインからも選べる）
+3. プラグイン名になったボタンをクリックすると、プラグインの GUI エディタが開く
 4. ヘッダーでキー / スケール / プリセット進行を選択する
 5. セルをクリックしてコードを編集する（**OPT** ボタンで omit / テンションを追加）
 6. 丸い再生ボタンで再生 / 停止（再生スタイルでアルペジオを選択可能）
@@ -129,8 +144,10 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 │   ├── StateStore.*                 # 状態のJSON保存/復元（セッション自動保存・ユーザープリセット）
 │   ├── UndoHistory.h                # スナップショット方式の Undo/Redo
 │   ├── MidiExporter.*               # SMF 書き出し（MIDI ドラッグ&ドロップ）
+│   ├── MidiInputRouter.*            # MIDI 入力デバイスの開閉とオーディオコールバックへの受け渡し
+│   ├── RecentPlugins.*              # 最近読み込んだプラグインのリスト（重複解消・上限5件）
 │   ├── Theme.*                      # Studio Noir デザインシステム（LookAndFeel・パレット）
-│   ├── HeaderBar.* / SequencerView.* / AnalysisStrip.* / ChordEditorPanel.* / TransportBar.*  # UIコンポーネント
+│   ├── HeaderBar.* / SequencerView.* / AnalysisStrip.* / ChordEditorPanel.* / TransportBar.* / SettingsPanel.*  # UIコンポーネント
 │   └── Localization.h               # UI日本語表示（UTF-8安全な変換層）
 ├── Tests/                           # 単体テスト
 │   ├── TestRunner.cpp               # テストランナー
@@ -144,6 +161,8 @@ xattr -d com.apple.quarantine /Applications/Reharm\ Studio.app
 │   ├── VoiceLeadingTest.cpp         # 自動ボイシングのテスト
 │   ├── PlayModeSelectionTest.cpp    # 再生モード選択の表示と内部状態の一致のテスト
 │   ├── MidiExporterTest.cpp         # SMF 書き出しのテスト
+│   ├── MidiInputRouterTest.cpp      # 保存した MIDI 入力デバイスの解決のテスト
+│   ├── RecentPluginsTest.cpp        # 最近読み込んだプラグインのリストのテスト
 │   └── TimingTest.cpp               # タイミング計算テスト
 ├── Experiments/                     # 実験的なプログラム（仕様確認・動作検証用）
 │   ├── PluginLoadTest.cpp           # VST3 プラグインのチャンネル構成検証（VPS Avenger 用）

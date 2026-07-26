@@ -179,33 +179,23 @@ TransportBar::TransportBar()
     addAndMakeVisible (playModeButton);
     updatePlayModeButtonLabel();
 
-    loadButton.showArrow = false;
-    loadButton.onClick = [this]
+    pluginButton.showArrow = false;
+    pluginButton.onClick = [this]
     {
-        if (onLoadPlugin)
+        // One button, two jobs: pick a plugin while there is none, open the
+        // loaded plugin's editor afterwards.
+        if (pluginLoaded)
+        {
+            if (onOpenPluginEditor)
+                onOpenPluginEditor();
+        }
+        else if (onLoadPlugin)
+        {
             onLoadPlugin();
+        }
     };
-    loadButton.onRightClick = [this]
-    {
-        juce::PopupMenu menu;
-        menu.setLookAndFeel (&getLookAndFeel());
-        menu.addItem ("Unload VST3", pluginLoaded, false,
-                      [this]
-                      {
-                          if (onUnloadPlugin)
-                              onUnloadPlugin();
-                      });
-        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&loadButton));
-    };
-    addAndMakeVisible (loadButton);
-
-    pluginNameButton.setColour (juce::TextButton::textColourOffId, theme::textDim);
-    pluginNameButton.onClick = [this]
-    {
-        if (onOpenPluginEditor)
-            onOpenPluginEditor();
-    };
-    addAndMakeVisible (pluginNameButton);
+    pluginButton.onRightClick = [this] { showPluginMenu(); };
+    addAndMakeVisible (pluginButton);
 
     midiBadge.onPrepareDragFile = [this] { return onPrepareMidiDragFile != nullptr ? onPrepareMidiDragFile() : juce::File(); };
     addAndMakeVisible (midiBadge);
@@ -229,20 +219,58 @@ void TransportBar::setVolume (float volume01)
     volumeLabel.setText ("Vol  " + juce::String (pct) + "%", juce::dontSendNotification);
 }
 
-void TransportBar::setPluginName (const juce::String& name)
+void TransportBar::setPlugin (const juce::String& name, const juce::String& path)
 {
     pluginLoaded = name.isNotEmpty();
+    activePluginPath = pluginLoaded ? path : juce::String();
+    pluginButton.setButtonText (pluginLoaded ? name : juce::String ("Load VST3"));
+}
 
-    if (name.isEmpty())
+void TransportBar::setRecentPlugins (const reharm::RecentPluginList& plugins)
+{
+    recentPlugins = plugins;
+}
+
+void TransportBar::showPluginMenu()
+{
+    juce::PopupMenu menu;
+    menu.setLookAndFeel (&getLookAndFeel());
+
+    menu.addItem (reharm::loc::tr ("Load plugin..."),
+                  [this]
+                  {
+                      if (onLoadPlugin)
+                          onLoadPlugin();
+                  });
+
+    // Unloading the plugin is exactly "play through the built-in synth", so the
+    // entry is ticked (and inert) when that is already the case.
+    menu.addItem (reharm::loc::tr ("Built-in synth"), pluginLoaded, ! pluginLoaded,
+                  [this]
+                  {
+                      if (onUnloadPlugin)
+                          onUnloadPlugin();
+                  });
+
+    if (! recentPlugins.empty())
     {
-        pluginNameButton.setButtonText ("No Plugin");
-        pluginNameButton.setColour (juce::TextButton::textColourOffId, theme::textDim);
+        // Most recent first; the one already playing is ticked and inert, like
+        // the built-in synth entry above.
+        menu.addSeparator();
+
+        for (const auto& recent : recentPlugins)
+        {
+            const bool isActive = pluginLoaded && recent.path == activePluginPath;
+            menu.addItem (recent.name, ! isActive, isActive,
+                          [this, path = recent.path]
+                          {
+                              if (onRecentPluginSelected)
+                                  onRecentPluginSelected (path);
+                          });
+        }
     }
-    else
-    {
-        pluginNameButton.setButtonText (name);
-        pluginNameButton.setColour (juce::TextButton::textColourOffId, theme::text);
-    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&pluginButton));
 }
 
 void TransportBar::setVoicing (reharm::Voicing::Style voicing)
@@ -379,9 +407,8 @@ void TransportBar::resized()
     playModeButton.setBounds (area.removeFromLeft (playModeW).withSizeKeepingCentre (playModeW, comboH));
 
     auto right = getLocalBounds().reduced (16, 10);
-    pluginNameButton.setBounds (right.removeFromRight (160).withSizeKeepingCentre (160, comboH));
-    right.removeFromRight (8);
-    loadButton.setBounds (right.removeFromRight (100).withSizeKeepingCentre (100, comboH));
+    const int pluginW = 200;
+    pluginButton.setBounds (right.removeFromRight (pluginW).withSizeKeepingCentre (pluginW, comboH));
     right.removeFromRight (8);
     midiBadge.setBounds (right.removeFromRight (76).withSizeKeepingCentre (76, comboH));
 }

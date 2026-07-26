@@ -60,6 +60,7 @@ public:
             s.midiInputName = "Keystation 49";
             s.arpPattern = ArpPattern::UpDown;
             s.arpRate = ArpRate::Sixteenth;
+            s.recentPlugins = { { "/Plugins/Two.vst3", "Two" }, { "/Plugins/One.vst3", "One" } };
 
             const auto v = StateStore::serialize (model, s);
 
@@ -96,6 +97,30 @@ public:
             expect (s2.arpRate == s.arpRate);
             expect (s2.midiInputId == s.midiInputId);
             expect (s2.midiInputName == s.midiInputName);
+            expect (s2.recentPlugins == s.recentPlugins);   // order preserved, newest first
+        }
+
+        beginTest ("recentPlugins: duplicates and overflow are dropped on load");
+        {
+            ProgressionModel model;
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major, -1 });
+
+            StateStore::SessionData s;
+            // Hand-edited file: more than the cap, with a repeat and an empty path.
+            for (int i = 1; i <= maxRecentPlugins + 2; ++i)
+                s.recentPlugins.push_back ({ "/p" + juce::String (i) + ".vst3", "P" + juce::String (i) });
+            s.recentPlugins.push_back ({ "/p1.vst3", "P1" });
+            s.recentPlugins.push_back ({ "", "Nameless" });
+
+            const auto v = StateStore::serialize (model, s);
+
+            ProgressionModel model2;
+            StateStore::SessionData s2;
+            expect (StateStore::deserialize (v, model2, s2));
+
+            expectEquals ((int) s2.recentPlugins.size(), maxRecentPlugins);
+            expect (s2.recentPlugins.front().path == "/p1.vst3");
+            expect (s2.recentPlugins.back().path == "/p5.vst3");
         }
 
         beginTest ("arp field: missing/unknown values fall back to Off / 1/8");
@@ -272,6 +297,7 @@ public:
             s.pluginStateB64 = "AAAA";
             s.midiInputId = "id-keystation";
             s.midiInputName = "Keystation 49";
+            s.recentPlugins = { { "/some/plugin.vst3", "Some Plugin" } };
 
             const auto v = StateStore::serialize (model, s, true);
 
@@ -279,7 +305,8 @@ public:
             expect (obj != nullptr);
             expect (! obj->hasProperty ("plugin"));
             expect (! obj->hasProperty ("volume"));
-            expect (! obj->hasProperty ("midi"));    // machine-local, like the plugin
+            expect (! obj->hasProperty ("midi"));            // machine-local, like the plugin
+            expect (! obj->hasProperty ("recentPlugins"));   // ditto
             expect (obj->hasProperty ("voicing"));   // written even in musicalOnly mode
 
             ProgressionModel model2;
@@ -290,6 +317,7 @@ public:
             expectWithinAbsoluteError (s2.volume, 0.8f, 0.0001f);
             expect (s2.pluginPath.isEmpty());
             expect (s2.midiInputId.isEmpty());
+            expect (s2.recentPlugins.empty());
         }
 
         beginTest ("musicalOnly: Auto voicing survives a user-preset save/load round trip");

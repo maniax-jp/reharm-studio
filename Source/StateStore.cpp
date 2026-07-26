@@ -210,6 +210,16 @@ juce::var StateStore::serialize (const ProgressionModel& model, const SessionDat
         pluginObj->setProperty ("state", s.pluginStateB64);
         root->setProperty ("plugin", juce::var (pluginObj));
 
+        juce::Array<juce::var> recents;
+        for (const auto& r : s.recentPlugins)
+        {
+            auto* recentObj = new juce::DynamicObject();
+            recentObj->setProperty ("path", r.path);
+            recentObj->setProperty ("name", r.name);
+            recents.add (juce::var (recentObj));
+        }
+        root->setProperty ("recentPlugins", juce::var (recents));
+
         // Machine-local, like the plugin: never part of a shared progression preset.
         auto* midiObj = new juce::DynamicObject();
         midiObj->setProperty ("inputId", s.midiInputId);
@@ -329,6 +339,21 @@ bool StateStore::deserialize (const juce::var& v, ProgressionModel& model, Sessi
         s.pluginName = juce::String();
         s.pluginStateB64 = juce::String();
     }
+
+    // Rebuilt through withRecentPlugin (in reverse, so the file's order is kept)
+    // to inherit its de-duplication and cap even from a hand-edited file.
+    RecentPluginList recents;
+    if (auto* recentsArray = v.getProperty ("recentPlugins", juce::var()).getArray())
+    {
+        for (int i = recentsArray->size(); --i >= 0;)
+        {
+            const auto& entry = (*recentsArray)[i];
+            recents = withRecentPlugin (std::move (recents),
+                                        entry.getProperty ("path", juce::var()).toString(),
+                                        entry.getProperty ("name", juce::var()).toString());
+        }
+    }
+    s.recentPlugins = std::move (recents);
 
     const auto midiVar = v.getProperty ("midi", juce::var());
     if (midiVar.isObject())
