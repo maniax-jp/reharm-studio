@@ -430,6 +430,97 @@ public:
             expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
         }
 
+        beginTest ("SecondaryDominant: final Eaug after Bm7 in C major (7th omitted)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0,  ChordQuality::Major,     -1 }); // C
+            model.setChord (1, 0, Chord { 11, ChordQuality::Minor7,    -1 }); // Bm7
+            model.setChord (2, 0, Chord { 4,  ChordQuality::Augmented, -1 }); // Eaug
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::RelatedTwoMinor);
+            expectEquals (analysis[1].label, juce::String ("Rel.IIm"));
+            expect (! analysis[2].diatonic);
+            expect (analysis[2].technique == NonDiatonicTechnique::SecondaryDominant);
+            expect (analysis[2].label.contains ("V7/VI"));
+        }
+
+        beginTest ("SecondaryDominant: Eaug to Am after Bm7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 11, ChordQuality::Minor7,    -1 }); // Bm7
+            model.setChord (1, 0, Chord { 4,  ChordQuality::Augmented, -1 }); // Eaug
+            model.setChord (2, 0, Chord { 9,  ChordQuality::Minor,     -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::RelatedTwoMinor);
+            expect (analysis[0].label.contains ("Rel.IIm"));
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expect (analysis[1].label.contains ("V7/VI"));
+        }
+
+        beginTest ("SecondaryDominant: Caug to F in C major (aug V7/IV)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,     -1 }); // C
+            model.setChord (1, 0, Chord { 0, ChordQuality::Augmented, -1 }); // Caug
+            model.setChord (2, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expect (analysis[1].label.contains ("V7/IV"));
+        }
+
+        beginTest ("TritoneSubstitution: F#7 to F in C major (pin of existing ura)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 6, ChordQuality::Dominant7, -1 }); // F#7
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::TritoneSubstitution);
+            expectEquals (analysis[0].label, juce::String ("Tritone Sub"));
+        }
+
+        beginTest ("TritoneSubstitution: F#blk to F in C major (ura of Caug)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 6, ChordQuality::Blackadder, -1 }); // F#blk
+            model.setChord (1, 0, Chord { 5, ChordQuality::Major,      -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::TritoneSubstitution);
+            expectEquals (analysis[0].label, juce::String ("Tritone Sub"));
+        }
+
+        beginTest ("TritoneSubstitution: A#blk to Am in C major (ura of E7)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (2);
+            model.setChord (0, 0, Chord { 10, ChordQuality::Blackadder, -1 }); // A#blk
+            model.setChord (1, 0, Chord { 9,  ChordQuality::Minor,      -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::TritoneSubstitution);
+            expectEquals (analysis[0].label, juce::String ("Tritone Sub"));
+        }
+
         beginTest ("RelatedTwoMinor: Em7b5 - A7 - Dm7");
         {
             ProgressionModel model;
@@ -1002,6 +1093,101 @@ public:
                 }
             }
             expect (found, "Confirmation should match regardless of how bars are split");
+        }
+
+        beginTest ("detectPatterns: Confirmation with Bm7 instead of Bm7b5");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (5);
+            model.setChord (0, 0, Chord { 0,  ChordQuality::Major,     -1 }); // C
+            model.setSubdivision (1, BarSubdivision::Two);
+            model.setChord (1, 0, Chord { 11, ChordQuality::Minor7,    -1 }); // Bm7 (was Bm7b5)
+            model.setChord (1, 1, Chord { 4,  ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (2, 0, Chord { 9,  ChordQuality::Minor7,    -1 }); // Am7
+            model.setSubdivision (3, BarSubdivision::Two);
+            model.setChord (3, 0, Chord { 7,  ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (3, 1, Chord { 0,  ChordQuality::Dominant7, -1 }); // C7
+            model.setChord (4, 0, Chord { 5,  ChordQuality::Major,     -1 }); // F
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+                if (p.name == "Confirmation (I-viim7b5-III7-vim7-iim7-V7-IV)")
+                    found = true;
+
+            expect (found, "Confirmation should match when vii is a minor 7th");
+        }
+
+        beginTest ("detectPatterns: Confirmation with Caug7 instead of C7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (5);
+            model.setChord (0, 0, Chord { 0,  ChordQuality::Major,        -1 }); // C
+            model.setSubdivision (1, BarSubdivision::Two);
+            model.setChord (1, 0, Chord { 11, ChordQuality::Minor7Flat5,  -1 }); // Bm7b5
+            model.setChord (1, 1, Chord { 4,  ChordQuality::Dominant7,    -1 }); // E7
+            model.setChord (2, 0, Chord { 9,  ChordQuality::Minor7,       -1 }); // Am7
+            model.setSubdivision (3, BarSubdivision::Two);
+            model.setChord (3, 0, Chord { 7,  ChordQuality::Minor7,       -1 }); // Gm7
+            model.setChord (3, 1, Chord { 0,  ChordQuality::Augmented7,   -1 }); // Caug7 (was C7)
+            model.setChord (4, 0, Chord { 5,  ChordQuality::Major,        -1 }); // F
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+                if (p.name == "Confirmation (I-viim7b5-III7-vim7-iim7-V7-IV)")
+                    found = true;
+
+            expect (found, "Confirmation should match when V/IV is an augmented 7th");
+        }
+
+        beginTest ("detectPatterns: Confirmation with Caug instead of C7");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (5);
+            model.setChord (0, 0, Chord { 0,  ChordQuality::Major,      -1 }); // C
+            model.setSubdivision (1, BarSubdivision::Two);
+            model.setChord (1, 0, Chord { 11, ChordQuality::Minor7Flat5, -1 }); // Bm7b5
+            model.setChord (1, 1, Chord { 4,  ChordQuality::Dominant7,   -1 }); // E7
+            model.setChord (2, 0, Chord { 9,  ChordQuality::Minor7,      -1 }); // Am7
+            model.setSubdivision (3, BarSubdivision::Two);
+            model.setChord (3, 0, Chord { 7,  ChordQuality::Minor7,      -1 }); // Gm7
+            model.setChord (3, 1, Chord { 0,  ChordQuality::Augmented,   -1 }); // Caug (was C7)
+            model.setChord (4, 0, Chord { 5,  ChordQuality::Major,       -1 }); // F
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+                if (p.name == "Confirmation (I-viim7b5-III7-vim7-iim7-V7-IV)")
+                    found = true;
+
+            expect (found, "Confirmation should match when V/IV is an augmented triad");
+        }
+
+        beginTest ("detectPatterns: Autumn Leaves rejects Bm7 in the m7b5 slot");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (8);
+            model.setChord (0, 0, Chord { 2,  ChordQuality::Minor7,      -1 }); // Dm7
+            model.setChord (1, 0, Chord { 7,  ChordQuality::Dominant7,   -1 }); // G7
+            model.setChord (2, 0, Chord { 0,  ChordQuality::Major7,      -1 }); // CM7
+            model.setChord (3, 0, Chord { 5,  ChordQuality::Major7,      -1 }); // FM7
+            model.setChord (4, 0, Chord { 11, ChordQuality::Minor7,      -1 }); // Bm7 (not m7b5)
+            model.setChord (5, 0, Chord { 4,  ChordQuality::Dominant7,   -1 }); // E7
+            model.setChord (6, 0, Chord { 9,  ChordQuality::Minor7,      -1 }); // Am7
+            model.setChord (7, 0, Chord { 9,  ChordQuality::Minor7,      -1 }); // Am7
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+                if (p.name == "Autumn Leaves (ii-V-I-IV-vii-III7-vi)")
+                    found = true;
+
+            expect (! found, "the m7b5 relaxation must not apply to Autumn Leaves");
         }
 
         // ---- Only One --------------------------------------------------------

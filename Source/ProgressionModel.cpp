@@ -284,6 +284,8 @@ const std::vector<PresetProgression>& ProgressionPresets::all()
         },
         // | C | Bm7b5 E7 | Am7 | Gm7 C7 | F |
         // Two bars carry a ii-V pair, so those entries hold a two-chord run.
+        // The vii degree may also be a plain minor 7th, and the V/IV degree may
+        // be played augmented (Caug7 or Caug instead of C7).
         { "Confirmation (I-viim7b5-III7-vim7-iim7-V7-IV)",
           {
               {0, ChordQuality::Major},
@@ -291,13 +293,25 @@ const std::vector<PresetProgression>& ProgressionPresets::all()
                   Alt { Specs {
                       {11, ChordQuality::Minor7Flat5},
                       {4,  ChordQuality::Dominant7}
+                  } },
+                  Alt { Specs {
+                      {11, ChordQuality::Minor7},
+                      {4,  ChordQuality::Dominant7}
                   } }
               } },
               {9, ChordQuality::Minor7},
               { Alts {
                   Alt { Specs {
                       {7, ChordQuality::Minor7},
-                      {0, ChordQuality::Dominant7}
+                      {0,  ChordQuality::Dominant7}
+                  } },
+                  Alt { Specs {
+                      {7, ChordQuality::Minor7},
+                      {0,  ChordQuality::Augmented7}
+                  } },
+                  Alt { Specs {
+                      {7, ChordQuality::Minor7},
+                      {0,  ChordQuality::Augmented}
                   } }
               } },
               {5, ChordQuality::Major}

@@ -38,7 +38,9 @@ bool isDominantQuality (ChordQuality q) noexcept
 {
     return q == ChordQuality::Dominant7
         || q == ChordQuality::Dominant7Sus4
-        || q == ChordQuality::Augmented7;
+        || q == ChordQuality::Augmented7
+        || q == ChordQuality::Augmented     // 7th omitted: triad reads as its 7th chord
+        || q == ChordQuality::Blackadder;   // dominant 7alt shell (root, b9, #5, b13)
 }
 
 bool isPicardyQuality (ChordQuality q) noexcept
@@ -678,6 +680,13 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     // also keys on the b2 degree; dominant-quality bII7 is left to that rule.
     if (matchesNeapolitan (c, next, key))
         return { false, NonDiatonicTechnique::NeapolitanSixth, "Neapolitan", {} };
+
+    // 2e. Augmented triad line cliche. An augmented triad harmonizing a
+    // chromatic line keeps its line-cliche reading (e.g. Fm - Eaug - Fm7/Eb
+    // in Eb major) even though the triad otherwise reads as a 7th-less
+    // dominant. Augmented7 keeps the functional reading (bII tritone sub).
+    if (c.quality == ChordQuality::Augmented && matchesLineCliche (c, prev, next))
+        return { false, NonDiatonicTechnique::LineCliche, "Line Cliche", {} };
 
     // 3. Double Dominant (II7). In a major key the II7 colour alone is enough;
     // in a minor key the dominant is itself an altered chord, so require the
