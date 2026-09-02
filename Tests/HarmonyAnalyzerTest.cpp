@@ -2358,6 +2358,564 @@ public:
             }
             expect (! found, "power chords carry no third, so no constant structure");
         }
+
+        //======================================================================
+        // Tonicization (partial modulation) and Secondary Leading Tone
+        //======================================================================
+        beginTest ("Tonicization: E7 Gm7 A7 Dm7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 4,  ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (1, 0, Chord { 7,  ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (2, 0, Chord { 9,  ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (3, 0, Chord { 2,  ChordQuality::Minor7,    -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/VI)"));
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::Tonicization);
+            expectEquals (analysis[1].label, juce::String ("Tonicization (in Dm)"));
+            expect (! analysis[2].diatonic);
+            expect (analysis[2].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[2].label, juce::String ("Sec.Dom (V7/II)"));
+            expect (analysis[3].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool foundTonicization = false;
+            bool foundTwoFiveOne = false;
+            bool foundStrong = false;
+            bool foundLeading = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "4-5-1 in Dm")
+                {
+                    foundTonicization = true;
+                    expectEquals (p.startIndex, 1);
+                    expectEquals (p.endIndex, 3);
+                }
+                if (p.name == "Two-Five-One")
+                    foundTwoFiveOne = true;
+                if (p.name == "Strong Progression")
+                    foundStrong = true;
+                if (p.name == "Leading Resolution")
+                {
+                    foundLeading = true;
+                    expectEquals (p.startIndex, 2);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (foundTonicization);
+            expect (! foundTwoFiveOne);
+            expect (! foundStrong);
+            expect (foundLeading);
+        }
+
+        beginTest ("Tonicization: Gm7 A7 Dm7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 7, ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (1, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (2, 0, Chord { 2, ChordQuality::Minor7,    -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::Tonicization);
+            expectEquals (analysis[0].label, juce::String ("Tonicization (in Dm)"));
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[1].label, juce::String ("Sec.Dom (V7/II)"));
+            expect (analysis[2].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool foundTonicization = false;
+            bool foundStrong = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "4-5-1 in Dm")
+                {
+                    foundTonicization = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 2);
+                }
+                if (p.name == "Strong Progression")
+                    foundStrong = true;
+            }
+            expect (foundTonicization);
+            expect (! foundStrong);
+        }
+
+        beginTest ("Tonicization: Gm7 A7 D in C major (major landing)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 7, ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (1, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (2, 0, Chord { 2, ChordQuality::Major,     -1 }); // D
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::Tonicization);
+            expectEquals (analysis[0].label, juce::String ("Tonicization (in Dm)"));
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[1].label, juce::String ("Sec.Dom (V7/II)"));
+            expect (! analysis[2].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "4-5-1 in D")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 2);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("Tonicization: E7 Gm7 A7 F in C major (deceptive III)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (1, 0, Chord { 7, ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (2, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (3, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/VI)"));
+            expect (analysis[1].technique == NonDiatonicTechnique::Tonicization);
+            expectEquals (analysis[1].label, juce::String ("Tonicization (in Dm)"));
+            expect (analysis[2].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[2].label, juce::String ("Sec.Dom (V7/II)"));
+            expect (analysis[3].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "4-5-3 in Dm")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 1);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("Tonicization: Gm7 A7 F in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 7, ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (1, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (2, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::Tonicization);
+            expectEquals (analysis[0].label, juce::String ("Tonicization (in Dm)"));
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[1].label, juce::String ("Sec.Dom (V7/II)"));
+            expect (analysis[2].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "4-5-3 in Dm")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 2);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("Tonicization: Gm7 A7 Bb in C major (VI landing)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 7,  ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (1, 0, Chord { 9,  ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (2, 0, Chord { 10, ChordQuality::Major,     -1 }); // Bb
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::Tonicization);
+            expectEquals (analysis[0].label, juce::String ("Tonicization (in Dm)"));
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::Unknown);
+            expect (! analysis[2].diatonic);
+            expect (analysis[2].technique == NonDiatonicTechnique::SubdominantMinor);
+            expectEquals (analysis[2].label, juce::String ("Subdom.Minor"));
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "4-5-6 in Dm")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 2);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("Tonicization: E7 Em7b5 A7 Dm in C major (ii-form)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Dominant7,   -1 }); // E7
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7Flat5, -1 }); // Em7b5
+            model.setChord (2, 0, Chord { 9, ChordQuality::Dominant7,   -1 }); // A7
+            model.setChord (3, 0, Chord { 2, ChordQuality::Minor,       -1 }); // Dm
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/VI)"));
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::RelatedTwoMinor);
+            expectEquals (analysis[1].label, juce::String ("Rel.IIm"));
+            expect (analysis[2].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[2].label, juce::String ("Sec.Dom (V7/II)"));
+            expect (analysis[3].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "2-5-1 in Dm")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 1);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("Tonicization: E7 Em7b5 A7 Bb in C major (ii-form deceptive)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 4,  ChordQuality::Dominant7,   -1 }); // E7
+            model.setChord (1, 0, Chord { 4,  ChordQuality::Minor7Flat5, -1 }); // Em7b5
+            model.setChord (2, 0, Chord { 9,  ChordQuality::Dominant7,   -1 }); // A7
+            model.setChord (3, 0, Chord { 10, ChordQuality::Major,       -1 }); // Bb
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/VI)"));
+            // Em7b5 is diatonic to C Dorian (iii of the borrowed mode), so with
+            // A7 unresolved (Unknown) the run falls through to Modal Interchange.
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::ModalInterchange);
+            expectEquals (analysis[1].label, juce::String ("M.I."));
+            expect (! analysis[2].diatonic);
+            expect (analysis[2].technique == NonDiatonicTechnique::Unknown);
+            expect (! analysis[3].diatonic);
+            expect (analysis[3].technique == NonDiatonicTechnique::SubdominantMinor);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "2-5-6 in Dm")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 1);
+                    expectEquals (p.endIndex, 3);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("Tonicization: B7 Dm7 E7 Am in A minor (tonic chain, no chip)");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 11, ChordQuality::Dominant7, -1 }); // B7
+            model.setChord (1, 0, Chord { 2,  ChordQuality::Minor7,    -1 }); // Dm7
+            model.setChord (2, 0, Chord { 4,  ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (3, 0, Chord { 9,  ChordQuality::Minor,     -1 }); // Am
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[0].label, juce::String ("Sec.Dom (V7/V)"));
+            expect (analysis[1].diatonic);
+            expect (analysis[2].diatonic);
+            expect (analysis[2].derivation == MinorDerivation::HarmonicMinor);
+            expect (analysis[3].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name.contains (" in Am"))
+                    found = true;
+            }
+            expect (! found);
+        }
+
+        beginTest ("Tonicization: Gm7 C7 F in C major (ii-form Rel.IIm + major chip)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 7, ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (1, 0, Chord { 0, ChordQuality::Dominant7, -1 }); // C7
+            model.setChord (2, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::RelatedTwoMinor);
+            expectEquals (analysis[0].label, juce::String ("Rel.IIm"));
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[1].label, juce::String ("Sec.Dom (V7/IV)"));
+            expect (analysis[2].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "2-5-1 in F")
+                {
+                    found = true;
+                    expectEquals (p.startIndex, 0);
+                    expectEquals (p.endIndex, 2);
+                }
+            }
+            expect (found);
+        }
+
+        beginTest ("Tonicization: Em7 A7 F in C major (diatonic-head gate)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Minor7,    -1 }); // Em7
+            model.setChord (1, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+            model.setChord (2, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            // Em7 is the diatonic iii7 of C major, so the diatonic-head gate
+            // suppresses any temporary-key chip for this run.
+            expect (analysis[0].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[1].label, juce::String ("Sec.Dom (V7/II)"));
+            expect (analysis[2].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name == "2-5-3 in Dm")
+                    found = true;
+            }
+            expect (! found);
+        }
+
+        beginTest ("SecondaryLeadingTone: G D#dim7 Em in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 7, ChordQuality::Major,       -1 }); // G
+            model.setChord (1, 0, Chord { 3, ChordQuality::Diminished7, -1 }); // D#dim7
+            model.setChord (2, 0, Chord { 4, ChordQuality::Minor,       -1 }); // Em
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryLeadingTone);
+            expectEquals (analysis[1].label, juce::String ("Sec.LT (vii/E)"));
+            expect (analysis[2].diatonic);
+        }
+
+        beginTest ("SecondaryLeadingTone: C F#dim7 G in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,       -1 }); // C
+            model.setChord (1, 0, Chord { 6, ChordQuality::Diminished7, -1 }); // F#dim7
+            model.setChord (2, 0, Chord { 7, ChordQuality::Major,       -1 }); // G
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryLeadingTone);
+            expectEquals (analysis[1].label, juce::String ("Sec.LT (vii/G)"));
+            expect (analysis[2].diatonic);
+        }
+
+        beginTest ("SecondaryLeadingTone: C F#dim7 G7 in C major");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 0, ChordQuality::Major,       -1 }); // C
+            model.setChord (1, 0, Chord { 6, ChordQuality::Diminished7, -1 }); // F#dim7
+            model.setChord (2, 0, Chord { 7, ChordQuality::Dominant7,   -1 }); // G7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryLeadingTone);
+            expectEquals (analysis[1].label, juce::String ("Sec.LT (vii/G)"));
+            expect (analysis[2].diatonic);
+        }
+
+        beginTest ("SecondaryLeadingTone: G#dim Em7b5 A7 in C major (delayed V7)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 8, ChordQuality::Diminished,  -1 }); // G#dim
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7Flat5, -1 }); // Em7b5
+            model.setChord (2, 0, Chord { 9, ChordQuality::Dominant7,   -1 }); // A7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryLeadingTone);
+            expectEquals (analysis[0].label, juce::String ("Sec.LT (vii/A)"));
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::RelatedTwoMinor);
+            expectEquals (analysis[1].label, juce::String ("Rel.IIm"));
+            expect (analysis[2].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[2].label, juce::String ("Sec.Dom (V7/II)"));
+        }
+
+        beginTest ("SecondaryLeadingTone: G#dim Em7b5 A in C major (delayed triad)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 8, ChordQuality::Diminished,  -1 }); // G#dim
+            model.setChord (1, 0, Chord { 4, ChordQuality::Minor7Flat5, -1 }); // Em7b5
+            model.setChord (2, 0, Chord { 9, ChordQuality::Major,       -1 }); // A
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].technique == NonDiatonicTechnique::SecondaryLeadingTone);
+            expectEquals (analysis[0].label, juce::String ("Sec.LT (vii/A)"));
+            // Em7b5 is diatonic to C Dorian; A major carries C#, so both stay
+            // non-diatonic (Em7b5 via Modal Interchange, A unrecognised).
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::ModalInterchange);
+            expectEquals (analysis[1].label, juce::String ("M.I."));
+            expect (! analysis[2].diatonic);
+            expect (analysis[2].technique == NonDiatonicTechnique::Unknown);
+        }
+
+        beginTest ("SecondaryLeadingTone: Am D#dim Dm7 E7 in A minor (Pass.Dim priority)");
+        {
+            ProgressionModel model;
+            model.setKey (aMinor);
+            model.setNumBars (4);
+            model.setChord (0, 0, Chord { 9, ChordQuality::Minor,      -1 }); // Am
+            model.setChord (1, 0, Chord { 3, ChordQuality::Diminished, -1 }); // D#dim
+            model.setChord (2, 0, Chord { 2, ChordQuality::Minor7,     -1 }); // Dm7
+            model.setChord (3, 0, Chord { 4, ChordQuality::Dominant7,  -1 }); // E7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (! analysis[1].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::PassingDiminished);
+            expectEquals (analysis[1].label, juce::String ("Pass.Dim"));
+            expect (analysis[2].diatonic);
+            expect (analysis[3].diatonic);
+        }
+
+        beginTest ("Tonicization negative: E7 Gm7 A7 in C major (no landing)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 4, ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (1, 0, Chord { 7, ChordQuality::Minor7,    -1 }); // Gm7
+            model.setChord (2, 0, Chord { 9, ChordQuality::Dominant7, -1 }); // A7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::Unknown);
+            expect (! analysis[1].diatonic);
+            expect (analysis[2].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[2].label, juce::String ("Sec.Dom (V7/II)"));
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name.contains (" in Dm"))
+                    found = true;
+            }
+            expect (! found);
+        }
+
+        beginTest ("Tonicization negative: Fm7 G7 Dm7 in C major (R is tonic)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 5, ChordQuality::Minor7,    -1 }); // Fm7
+            model.setChord (1, 0, Chord { 7, ChordQuality::Dominant7, -1 }); // G7
+            model.setChord (2, 0, Chord { 2, ChordQuality::Minor7,    -1 }); // Dm7
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (! analysis[0].diatonic);
+            expect (analysis[0].technique == NonDiatonicTechnique::SubdominantMinor);
+            expect (analysis[1].diatonic);
+            expect (analysis[2].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name.contains (" in Cm"))
+                    found = true;
+            }
+            expect (! found);
+        }
+
+        beginTest ("Tonicization negative: Dm7 E7 F in C major (diatonic head gate)");
+        {
+            ProgressionModel model;
+            model.setKey (cMajor);
+            model.setNumBars (3);
+            model.setChord (0, 0, Chord { 2, ChordQuality::Minor7,    -1 }); // Dm7
+            model.setChord (1, 0, Chord { 4, ChordQuality::Dominant7, -1 }); // E7
+            model.setChord (2, 0, Chord { 5, ChordQuality::Major,     -1 }); // F
+
+            const auto analysis = HarmonyAnalyzer::analyzeAll (model);
+            expect (analysis[0].diatonic);
+            expect (analysis[1].technique == NonDiatonicTechnique::SecondaryDominant);
+            expectEquals (analysis[1].label, juce::String ("Sec.Dom (V7/VI)"));
+            expect (analysis[2].diatonic);
+
+            const auto patterns = HarmonyAnalyzer::detectPatterns (model);
+            bool found = false;
+            for (const auto& p : patterns)
+            {
+                if (p.name.contains (" in Am"))
+                    found = true;
+            }
+            expect (! found);
+        }
     }
 };
 

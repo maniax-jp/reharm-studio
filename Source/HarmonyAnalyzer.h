@@ -27,6 +27,8 @@ enum class NonDiatonicTechnique
     FrenchSixth,           // Fr+6: b6, 1, 2, #4 -- resolving to V
     GermanSixth,           // Ger+6: b6, 1, b3, #4 -- resolving to V
     ChromaticMediant,      // major/minor triad a chromatic third away from a neighbour
+    Tonicization,          // iv-V (or ii-V) run toward a temporary minor key (partial modulation)
+    SecondaryLeadingTone,  // vii°/X: diminished chord a semitone below a non-tonic target
     Unknown                // non-diatonic but no technique recognised
 };
 

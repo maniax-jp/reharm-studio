@@ -727,6 +727,61 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
     if (isDominantQuality (c.quality) && (offset == 0 || offset == 5))
         return { false, NonDiatonicTechnique::BluesSeventh, "Blues 7th", {} };
 
+    // 5d. Tonicization head: a pre-dominant (iv of R) followed by V of R and a
+    // landing chord of the temporary minor key R (i, or the deceptive III / VI).
+    // The ii-form head (+5 step) keeps the RelatedTwoMinor reading, so only the
+    // iv-form (+2 step) head is labelled here. Diatonic heads are caught by
+    // rule 1 first, so this only fires for non-diatonic chords.
+    if (isMinorTriadFamily (c.quality)
+        && next.has_value()
+        && hasDominantFunction (*next)
+        && normalizePc (functionalRootPitchClass (*next) - c.rootPitchClass) == 2)
+    {
+        const int R = normalizePc (functionalRootPitchClass (*next) + 5);
+
+        if (R != key.tonicPitchClass)
+        {
+            if (const auto next2 = nextRealChord (real, realIndex + 1))
+            {
+                const int land = normalizePc (next2->rootPitchClass - R);
+                const bool reached = land == 0
+                    && (isMajorTriadFamily (next2->quality) || isMinorTriadFamily (next2->quality));
+                const bool deceptive = (land == 3 || land == 8)
+                    && isMajorTriadFamily (next2->quality);
+
+                if (reached || deceptive)
+                    return { false, NonDiatonicTechnique::Tonicization,
+                             "Tonicization (in " + ChordModel::pitchClassName (R) + "m)", {} };
+            }
+        }
+    }
+
+    // 5e. Delayed secondary dominant: V7/V followed by an inserted pre-dominant
+    // (ii or iv of the temporary key R), then V7 of R, then any triad landing.
+    // E.g. E7 Gm7 A7 Dm7 in C (V7/VI -> iv7 -> V7 -> i in Dm). Adjacent
+    // resolutions are caught by rule 4 first, so this only fires when the
+    // dominant does NOT resolve straight to its target.
+    if (hasDominantFunction (c)
+        && next.has_value()
+        && (isMinorTriadFamily (next->quality) || next->quality == ChordQuality::Minor7Flat5)
+        && (normalizePc (next->rootPitchClass - c.rootPitchClass) == 0     // ii of R
+            || normalizePc (next->rootPitchClass - c.rootPitchClass) == 3)) // iv of R
+    {
+        const auto next2 = nextRealChord (real, realIndex + 1);
+        const auto next3 = nextRealChord (real, realIndex + 2);
+
+        if (next2.has_value()
+            && hasDominantFunction (*next2)
+            && normalizePc (functionalRootPitchClass (*next2) - c.rootPitchClass) == 5
+            && next3.has_value()
+            && (isMajorTriadFamily (next3->quality) || isMinorTriadFamily (next3->quality)))
+        {
+            const juce::String roman = ChordModel::degreeRoman (normalizePc (c.rootPitchClass + 5), key);
+            return { false, NonDiatonicTechnique::SecondaryDominant,
+                     "Sec.Dom (V7/" + roman + ")", {} };
+        }
+    }
+
     // 6. Passing Diminished
     // Ascending: dim root is a chromatic step above prev and/or below next.
     // Descending: dim root is a chromatic step above next (prev is ignored).
@@ -761,6 +816,49 @@ ChordAnalysis classifyReal (const std::vector<RealChord>& real,
                 && normalizePc (prev->rootPitchClass) == normalizePc (c.rootPitchClass)))
         {
             return { false, NonDiatonicTechnique::CommonToneDiminished, "C.T.Dim", {} };
+        }
+    }
+
+    // 5f. Secondary leading tone (vii°/X): a diminished triad whose root sits a
+    // semitone below a non-tonic target, resolving directly to that target as a
+    // triad or dominant. Runs after rule 6, so a true passing diminished
+    // (chromatic step above the previous bass) keeps higher priority.
+    if (isDiminishedQuality (c.quality)
+        && next.has_value()
+        && (isMajorTriadFamily (next->quality)
+            || isMinorTriadFamily (next->quality)
+            || hasDominantFunction (*next)))
+    {
+        const int target = functionalRootPitchClass (*next);
+
+        if (normalizePc (c.rootPitchClass) == normalizePc (target - 1)
+            && target != key.tonicPitchClass)
+        {
+            return { false, NonDiatonicTechnique::SecondaryLeadingTone,
+                     "Sec.LT (vii/" + ChordModel::pitchClassName (target) + ")", {} };
+        }
+    }
+
+    // 5g. Secondary leading tone with delayed resolution: vii°/X -> ii (or iv)
+    // of the temporary key R -> X. E.g. G#dim Em7b5 A7 in C (vii°/V -> ii of Dm -> V).
+    if (isDiminishedQuality (c.quality)
+        && next.has_value()
+        && (isMinorTriadFamily (next->quality) || next->quality == ChordQuality::Minor7Flat5))
+    {
+        const auto next2 = nextRealChord (real, realIndex + 1);
+        const int T = normalizePc (c.rootPitchClass + 1);   // resolution target
+
+        if (next2.has_value()
+            && (isMajorTriadFamily (next2->quality)
+                || isMinorTriadFamily (next2->quality)
+                || hasDominantFunction (*next2))
+            && normalizePc (functionalRootPitchClass (*next2)) == T
+            && T != key.tonicPitchClass
+            && (normalizePc (next->rootPitchClass - c.rootPitchClass) == 8     // ii of R
+                || normalizePc (next->rootPitchClass - c.rootPitchClass) == 11)) // iv of R
+        {
+            return { false, NonDiatonicTechnique::SecondaryLeadingTone,
+                     "Sec.LT (vii/" + ChordModel::pitchClassName (T) + ")", {} };
         }
     }
 
@@ -1006,6 +1104,57 @@ std::vector<DetectedPattern> HarmonyAnalyzer::detectPatterns (const ProgressionM
             real[static_cast<size_t> (i)].flatIndex,
             real[static_cast<size_t> (i + 2)].flatIndex
         });
+        twoFiveOneRanges.push_back ({ i, i + 2 });
+    }
+
+    // ---- 1b. Tonicization runs in a temporary key (digit chip) ----
+    // iv-V-x or ii-V-x runs where the temporary key R is not the progression's
+    // tonic and the head chord is non-diatonic: "4-5-1 in Dm", "2-5-6 in Dm".
+    // A major landing at degree 1 reads as the temporary major key ("2-5-1 in F");
+    // minor landings and deceptive III/VI landings stay in the minor key ("m").
+    for (int i = 0; i + 2 < static_cast<int> (real.size()); ++i)
+    {
+        const auto& a = real[static_cast<size_t> (i)].chord;
+        const auto& b = real[static_cast<size_t> (i + 1)].chord;
+        const auto& c = real[static_cast<size_t> (i + 2)].chord;
+
+        if (! hasDominantFunction (b))
+            continue;
+
+        const bool iiForm = isRelatedTwoQuality (a.quality)
+            && normalizePc (functionalRootPitchClass (b) - a.rootPitchClass) == 5;
+        const bool ivForm = isMinorTriadFamily (a.quality)
+            && normalizePc (functionalRootPitchClass (b) - a.rootPitchClass) == 2;
+
+        if (! iiForm && ! ivForm)
+            continue;
+
+        const int R = normalizePc (functionalRootPitchClass (b) + 5);
+        if (R == key.tonicPitchClass)
+            continue;
+
+        const int landing = normalizePc (c.rootPitchClass - R);
+        int degC = 0;
+        if (landing == 0 && (isMajorTriadFamily (c.quality) || isMinorTriadFamily (c.quality)))
+            degC = 1;
+        else if (landing == 3 && isMajorTriadFamily (c.quality))
+            degC = 3;
+        else if (landing == 8 && isMajorTriadFamily (c.quality))
+            degC = 6;
+
+        if (degC == 0)
+            continue;
+
+        // Diatonic-head runs (e.g. Dm7-E7-F in C) keep the current behaviour.
+        if (ChordModel::isDiatonic (a, key))
+            continue;
+
+        const char* suffix = (degC == 1 && ! isMinorTriadFamily (c.quality)) ? "" : "m";
+        const juce::String name = juce::String (iiForm ? "2" : "4") + "-5-" + juce::String (degC)
+                                + " in " + ChordModel::pitchClassName (R) + suffix;
+
+        patterns.push_back ({ name, real[static_cast<size_t> (i)].flatIndex,
+                              real[static_cast<size_t> (i + 2)].flatIndex });
         twoFiveOneRanges.push_back ({ i, i + 2 });
     }
 
